@@ -14,13 +14,14 @@
 		"https://crm.oceantechnolab.com/*"
 	],
 	"background": {
-		"service_worker": "src/background.js"
+		"service_worker": "background.js"
 	},
 	"content_scripts": [
 		{
 			"matches": ["https://web.whatsapp.com/*"],
-			"js": ["src/content.js"],
-			"css": ["src/styles.css"]
+			"js": ["content.js"],
+			"css": ["styles.css"],
+			"run_at": "document_end"
 		}
 	],
 	"action": {

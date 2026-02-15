@@ -94,6 +94,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		return true;
 	}
 
+	if (message.type === "getLeads") {
+		const headers = { "x-org-id": message.orgId };
+		apiRequest(baseUrl, "/v1/lead?page_size=500", { headers })
+			.then((data) => sendResponse({ ok: true, data }))
+			.catch((error) => sendResponse({ ok: false, error: error.message }));
+		return true;
+	}
+
 	if (message.type === "pingAuth") {
 		apiRequest(baseUrl, "/v1/user/logged")
 			.then((data) => sendResponse({ ok: true, data }))

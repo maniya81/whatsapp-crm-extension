@@ -74,6 +74,24 @@ The extension automatically detects WhatsApp's theme:
 
 ### Troubleshooting
 
+#### Nothing works / Extension completely broken?
+**CRITICAL**: CSP Violation Error
+```
+EvalError: Evaluating a string as JavaScript violates CSP directive 'unsafe-eval'
+```
+
+This has been fixed! If you see this error:
+1. Pull latest code: `git pull`
+2. Clean install: `rm -rf node_modules dist && npm install`
+3. Rebuild: `npm run build`
+4. Remove extension from Chrome completely
+5. Restart Chrome
+6. Load extension from fresh `dist/` folder
+7. Hard refresh WhatsApp Web (Ctrl+Shift+R)
+
+**What was wrong**: Webpack was using eval() which violates Chrome extension security policy.  
+**Fixed by**: Adding `devtool: false` to webpack.config.js
+
 #### Stage bar not showing?
 1. Check if you're logged into CRM
 2. Refresh WhatsApp Web page
@@ -98,8 +116,9 @@ This has been fixed! The error occurred when stages had undefined names.
 This has been fixed! The extension now prevents duplicate React mounting.
 1. Ensure you have the latest version
 2. Both content-legacy.js and content.js were loading (now fixed)
-3. Rebuild and reload the extension
-4. The error should no longer appear
+3. Global initialization flag added
+4. Rebuild and reload the extension
+5. The error should no longer appear
 
 #### Storage mutation event handler error?
 This was caused by duplicate script loading (now fixed).

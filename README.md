@@ -16,5 +16,5 @@
 ## Notes
 
 - Make sure you are logged into the CRM web app in the same browser.
-- API base default is http://localhost:8000/api
+- API base default is https://crm.oceantechnolab.com/api
 - If CSRF is enabled, the extension sends X-CSRF-Token automatically.

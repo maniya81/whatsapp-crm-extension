@@ -14,7 +14,8 @@ const STAGE_COLORS: Record<string, string> = {
   'DEFAULT': '#7b6f63'
 };
 
-function getStageColor(stageName: string): string {
+function getStageColor(stageName: string | undefined | null): string {
+  if (!stageName) return STAGE_COLORS['DEFAULT'];
   const upperName = stageName.toUpperCase();
   return STAGE_COLORS[upperName] || STAGE_COLORS['DEFAULT'];
 }
@@ -75,6 +76,13 @@ export function StageBar({ leadsByStage }: StageBarProps) {
     >
       {stages.map((stage) => {
         const stageName = stage.name;
+        
+        // Skip stages without names
+        if (!stageName) {
+          console.warn('[StageBar] Skipping stage without name:', stage);
+          return null;
+        }
+        
         const count = leadsByStage[stageName]?.length || 0;
         const isActive = activeStage === stageName;
         const color = getStageColor(stageName);

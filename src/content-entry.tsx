@@ -26,6 +26,13 @@ async function injectReactApp() {
   
   await waitForWhatsAppReady();
   
+  // Check if React root already exists to prevent duplicate mounting
+  const existingContainer = document.getElementById('ocrm-react-root');
+  if (existingContainer) {
+    console.log('[OceanCRM] React app already mounted, skipping...');
+    return;
+  }
+  
   console.log('[OceanCRM] Injecting React app...');
 
   // Create container for our React app

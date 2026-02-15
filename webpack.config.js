@@ -2,6 +2,7 @@ const path = require('path');
 const CopyPlugin = require('copy-webpack-plugin');
 
 module.exports = {
+  mode: 'production',
   entry: {
     content: './src/content-entry.tsx',
     background: './src/background.js'
@@ -11,6 +12,7 @@ module.exports = {
     filename: '[name].js',
     clean: true
   },
+  devtool: false, // Disable eval - required for Chrome extension CSP
   module: {
     rules: [
       {

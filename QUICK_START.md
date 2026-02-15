@@ -80,6 +80,19 @@ The extension automatically detects WhatsApp's theme:
 3. Check browser console for errors
 4. Verify orgId is saved (see Developer section)
 
+#### API Error: "page_size should be less than or equal to 500"?
+This has been fixed! If you see this error:
+1. Pull latest code: `git pull`
+2. Rebuild: `npm run build`
+3. Reload extension in Chrome
+4. The extension now fetches max 500 leads (API limit)
+
+#### Multiple UIM tree roots error?
+This has been fixed! The extension now prevents duplicate React mounting.
+1. Ensure you have the latest version
+2. Rebuild and reload the extension
+3. The error should no longer appear
+
 #### No highlights appearing?
 1. Click a stage to activate filter
 2. Check if phone numbers match CRM data

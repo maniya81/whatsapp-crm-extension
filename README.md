@@ -103,7 +103,7 @@ src/
 ## API Endpoints
 
 - `GET /v1/lead/stage/` - Fetch stages
-- `GET /v1/lead?page_size=1000` - Fetch leads
+- `GET /v1/lead?page_size=500` - Fetch leads (max 500 per API limit)
 - `POST /v1/lead` - Create new lead
 
 ## Notes
@@ -113,3 +113,4 @@ src/
 - If CSRF is enabled, the extension sends X-CSRF-Token automatically.
 - Stage filtering is performed client-side for performance
 - Phone number matching is normalized (removes spaces, brackets, keeps +)
+- Lead limit: Maximum 500 leads fetched per request (API enforced)

@@ -24,7 +24,7 @@ ExtensionApp (LeadProvider)
 2. **Data Fetching**
    - Parallel API calls to:
      - `/v1/lead/stage/` (fetch stages)
-     - `/v1/lead?page_size=1000` (fetch leads)
+     - `/v1/lead?page_size=500` (fetch leads, max 500 per API limit)
    - Data stored in LeadContext
 
 3. **Grouping**

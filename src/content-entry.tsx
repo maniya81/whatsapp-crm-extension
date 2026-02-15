@@ -39,7 +39,6 @@ async function injectReactApp() {
   container.style.pointerEvents = 'none';
   
   // Make children interactive
-  container.style.pointerEvents = 'none';
   const style = document.createElement('style');
   style.textContent = `
     #ocrm-react-root > * {

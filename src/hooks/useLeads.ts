@@ -39,14 +39,17 @@ export function useLeads(orgId: string | null) {
     };
 
     loadData();
-  }, [orgId]);
+  }, [orgId, setLoading, setError, setStages, setLeads]);
 
   // Group leads by stage using useMemo for performance
   const leadsByStage = useMemo(() => {
     const grouped: Record<string, Lead[]> = {};
     
     leads.forEach(lead => {
-      const stage = lead.stage || 'UNKNOWN';
+      const stage = lead.stage;
+      // Skip leads without a stage assignment
+      if (!stage) return;
+      
       if (!grouped[stage]) {
         grouped[stage] = [];
       }

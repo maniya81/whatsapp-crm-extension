@@ -59,7 +59,6 @@ export function ChatHighlighter({ filteredLeads }: ChatHighlighterProps) {
           if (!badge) {
             badge = document.createElement('div');
             badge.className = 'ocrm-stage-badge';
-            badge.textContent = '●';
             Object.assign((badge as HTMLElement).style, {
               position: 'absolute',
               top: '10px',

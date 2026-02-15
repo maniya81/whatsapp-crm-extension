@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLeadContext } from '../context/LeadContext';
 
 interface StageBarProps {
@@ -21,6 +21,22 @@ function getStageColor(stageName: string): string {
 
 export function StageBar({ leadsByStage }: StageBarProps) {
   const { stages, activeStage, setActiveStage } = useLeadContext();
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Detect dark mode
+  useEffect(() => {
+    const checkDarkMode = () => {
+      setIsDarkMode(document.body.classList.contains('dark'));
+    };
+
+    checkDarkMode();
+
+    // Watch for theme changes
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+    return () => observer.disconnect();
+  }, []);
 
   const handleStageClick = (stageName: string) => {
     // Toggle: if clicking the same stage, deselect it
@@ -31,6 +47,12 @@ export function StageBar({ leadsByStage }: StageBarProps) {
     }
   };
 
+  const backgroundColor = isDarkMode ? 'rgba(17, 27, 33, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+  const borderColor = isDarkMode ? '#2a3942' : '#e0e0e0';
+  const inactiveBg = isDarkMode ? '#202c33' : '#f5f5f5';
+  const inactiveHoverBg = isDarkMode ? '#2a3942' : '#e0e0e0';
+  const inactiveTextColor = isDarkMode ? '#e0e0e0' : '#333';
+
   return (
     <div
       style={{
@@ -39,9 +61,9 @@ export function StageBar({ leadsByStage }: StageBarProps) {
         left: '0',
         right: '0',
         zIndex: 200,
-        background: 'rgba(255, 255, 255, 0.95)',
+        background: backgroundColor,
         backdropFilter: 'blur(10px)',
-        borderBottom: '1px solid #e0e0e0',
+        borderBottom: `1px solid ${borderColor}`,
         padding: '8px 16px',
         display: 'flex',
         gap: '8px',
@@ -68,8 +90,8 @@ export function StageBar({ leadsByStage }: StageBarProps) {
               padding: '6px 12px',
               border: `2px solid ${isActive ? color : 'transparent'}`,
               borderRadius: '20px',
-              background: isActive ? color : '#f5f5f5',
-              color: isActive ? '#ffffff' : '#333',
+              background: isActive ? color : inactiveBg,
+              color: isActive ? '#ffffff' : inactiveTextColor,
               fontSize: '13px',
               fontWeight: isActive ? 600 : 500,
               cursor: 'pointer',
@@ -79,12 +101,12 @@ export function StageBar({ leadsByStage }: StageBarProps) {
             }}
             onMouseEnter={(e) => {
               if (!isActive) {
-                e.currentTarget.style.background = '#e0e0e0';
+                e.currentTarget.style.background = inactiveHoverBg;
               }
             }}
             onMouseLeave={(e) => {
               if (!isActive) {
-                e.currentTarget.style.background = '#f5f5f5';
+                e.currentTarget.style.background = inactiveBg;
               }
             }}
           >

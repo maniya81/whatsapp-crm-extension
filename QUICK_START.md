@@ -87,11 +87,25 @@ This has been fixed! If you see this error:
 3. Reload extension in Chrome
 4. The extension now fetches max 500 leads (API limit)
 
+#### TypeError: "Cannot read properties of undefined (reading 'toUpperCase')"?
+This has been fixed! The error occurred when stages had undefined names.
+1. Pull latest code: `git pull`
+2. Rebuild: `npm run build`
+3. Reload extension in Chrome
+4. Stages without names are now safely skipped
+
 #### Multiple UIM tree roots error?
 This has been fixed! The extension now prevents duplicate React mounting.
 1. Ensure you have the latest version
-2. Rebuild and reload the extension
-3. The error should no longer appear
+2. Both content-legacy.js and content.js were loading (now fixed)
+3. Rebuild and reload the extension
+4. The error should no longer appear
+
+#### Storage mutation event handler error?
+This was caused by duplicate script loading (now fixed).
+1. Only content.js now loads (content-legacy.js removed)
+2. Pull latest and rebuild
+3. Extension should work without storage errors
 
 #### No highlights appearing?
 1. Click a stage to activate filter

@@ -13,9 +13,20 @@
   - File: `src/content-entry.tsx` lines 29-34
   - Impact: No more WhatsApp UIM conflicts, React app mounts only once
 
+- **Undefined Stage Name Error**: Added null/undefined checks for stage names
+  - Error: `"Cannot read properties of undefined (reading 'toUpperCase')"`
+  - File: `src/components/StageBar.tsx` lines 17-20, 76-88
+  - Impact: Stages without names are safely skipped with warning
+
+- **Duplicate Script Loading**: Removed content-legacy.js from manifest
+  - Error: Multiple UIM roots and storage mutation errors
+  - File: `manifest.json` line 22
+  - Impact: Only content.js loads, preventing initialization conflicts
+
 ### Notes
 - If you need more than 500 leads, pagination would need to be implemented
 - The extension now properly checks for existing React root before mounting
+- Stages without names are logged as warnings and skipped in UI
 
 ## [0.1.0] - 2026-02-15
 

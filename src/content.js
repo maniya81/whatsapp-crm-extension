@@ -141,6 +141,44 @@ let stageCounts = new Map();
 /** @type {Array<{id: object, name: string, isGroup: boolean}>} Cached WPP chat list */
 let cachedChatList = [];
 
+// ============================================================
+// CHAT STAGE BUCKETS — Custom Chat List Data
+// ============================================================
+
+/**
+ * Per-stage arrays of {chat, lead, phone} objects.
+ * Built by merging cachedChatList (WPP) + phoneStageMap (API).
+ *
+ * Key = stage name (e.g., "RAW (UNQUALIFIED)")
+ * Value = Array<{ chat: WPPChat, lead: LeadData, phone: string }>
+ *
+ * Equivalent to Kraya's D[slug] buckets.
+ * @type {Map<string, Array<{chat: object, lead: object, phone: string}>>}
+ */
+let chatsByStage = new Map();
+
+/**
+ * Lead data indexed by WPP chat serialized ID.
+ * Allows quick lead lookup when rendering or clicking a chat item.
+ *
+ * Equivalent to Kraya's B[serializedId].
+ * @type {Map<string, {stage: string, leadId: string, name: string, wa_chat_id: string|null}>}
+ */
+let leadByChatId = new Map();
+
+/**
+ * WPP chat object indexed by serialized ID.
+ * Equivalent to Kraya's T[serializedId].
+ * @type {Map<string, object>}
+ */
+let chatById = new Map();
+
+/**
+ * Whether the custom chat list is currently visible (a stage filter is active).
+ * @type {boolean}
+ */
+let customListVisible = false;
+
 /**
  * Normalize a phone number for consistent matching.
  * Strips everything except digits.
@@ -247,15 +285,21 @@ async function loadAllLeads(baseUrl, orgId) {
 /**
  * Recompute per-stage lead counts.
  */
+/**
+ * Recompute per-stage counts FROM chatsByStage buckets.
+ * REPLACES the old version that counted from phoneStageMap.
+ *
+ * The key difference: this counts leads that have a matching WPP chat,
+ * not all leads in the CRM. If a lead has no WhatsApp chat,
+ * it's still included via the dummy entry (see buildChatStageBuckets).
+ */
 function recomputeStageCounts() {
   stageCounts.clear();
   for (var i = 0; i < stagesList.length; i++) {
-    stageCounts.set(stagesList[i].stage, 0);
+    var sName = stagesList[i].stage;
+    var bucket = chatsByStage.get(sName);
+    stageCounts.set(sName, bucket ? bucket.length : 0);
   }
-  phoneStageMap.forEach(function (data) {
-    var current = stageCounts.get(data.stage) || 0;
-    stageCounts.set(data.stage, current + 1);
-  });
 }
 
 /**
@@ -419,45 +463,138 @@ function bindStageTabClicks() {
 /**
  * Handle stage tab click — filter or reset.
  */
+/**
+ * Handle stage tab click — show custom filtered list or restore native list.
+ * REPLACES the old handleStageTabClick() that used filterChatList().
+ */
 function handleStageTabClick(e) {
   var tab = e.currentTarget;
   var stageName = tab.dataset.stage;
 
-  // Double-click on active tab → reset to "All"
+  // Double-click on active tab or "ALL" → reset
   if (
     (stageName === "ALL" && activeStageFilter === null) ||
     stageName === activeStageFilter
   ) {
-    document.querySelectorAll(".ocrm-stage-tab").forEach(function (t) {
-      t.classList.remove("ocrm-stage-tab-active");
-    });
-    var allTab = document.querySelector('.ocrm-stage-tab[data-stage="ALL"]');
-    if (allTab) allTab.classList.add("ocrm-stage-tab-active");
+    // Reset to "All" — show WhatsApp's native list
     activeStageFilter = null;
-    filterChatList();
+    highlightStageTab("ALL");
+    hideCustomChatList();
     return;
   }
 
-  // Activate selected stage
+  // Click "ALL" explicitly
+  if (stageName === "ALL") {
+    activeStageFilter = null;
+    highlightStageTab("ALL");
+    hideCustomChatList();
+    return;
+  }
+
+  // Activate a specific stage filter
+  activeStageFilter = stageName;
+  highlightStageTab(stageName);
+  showCustomChatList(stageName);
+}
+
+/**
+ * Highlight the active stage tab and deactivate others.
+ * @param {string} stageName
+ */
+function highlightStageTab(stageName) {
   document.querySelectorAll(".ocrm-stage-tab").forEach(function (t) {
     t.classList.remove("ocrm-stage-tab-active");
   });
-  tab.classList.add("ocrm-stage-tab-active");
-  activeStageFilter = stageName === "ALL" ? null : stageName;
-  filterChatList();
+  var target = document.querySelector(
+    '.ocrm-stage-tab[data-stage="' + stageName + '"]',
+  );
+  if (target) target.classList.add("ocrm-stage-tab-active");
+}
+
+/**
+ * Show the custom chat list and hide WhatsApp's native list.
+ * @param {string} stageName - Stage to display
+ */
+function showCustomChatList(stageName) {
+  // 1. Hide WhatsApp's native chat list
+  var panesSide = document.getElementById("pane-side");
+  if (panesSide) panesSide.style.display = "none";
+
+  // 2. Ensure custom container exists (WhatsApp may have rebuilt its DOM)
+  var customList = document.getElementById("ocrm-chat-list");
+  if (!customList) {
+    console.warn("[OceanCRM] Custom chat list missing — re-creating");
+    createCustomChatListContainer();
+    customList = document.getElementById("ocrm-chat-list");
+  }
+  if (customList) customList.style.display = "";
+
+  // 3. Render filtered chats
+  renderFilteredChatList(stageName);
+
+  customListVisible = true;
+  console.log("[OceanCRM] Showing custom list for stage: " + stageName);
+}
+
+/**
+ * Hide the custom chat list and restore WhatsApp's native list.
+ */
+function hideCustomChatList() {
+  // 1. Hide custom list
+  var customList = document.getElementById("ocrm-chat-list");
+  if (customList) customList.style.display = "none";
+
+  // 2. Restore WhatsApp's native chat list
+  var panesSide = document.getElementById("pane-side");
+  if (panesSide) panesSide.style.display = "";
+
+  customListVisible = false;
+  console.log("[OceanCRM] Restored native WhatsApp chat list");
+}
+
+/**
+ * Handle click on a custom chat list item.
+ * Uses WPP.chat API to open the chat in WhatsApp's native UI.
+ *
+ * @param {string} serializedId - e.g., "919876543210@c.us"
+ * @param {boolean} isDummy - If true, this lead has no WA chat (just CRM data)
+ */
+async function handleChatItemClick(serializedId, isDummy) {
+  if (isDummy) {
+    showToast("No WhatsApp chat found for this contact", "info");
+    return;
+  }
+
+  try {
+    await wppRequest("openChat", { chatId: serializedId }, 5000);
+    console.log("[OceanCRM] Opened chat: " + serializedId);
+  } catch (err) {
+    console.error("[OceanCRM] Failed to open chat:", err);
+    showToast("Failed to open chat", "error");
+  }
 }
 
 /**
  * Update counts on stage tabs.
  */
+/**
+ * Update counts displayed on stage tabs.
+ * "All" tab shows total across all stages.
+ */
 function updateStageTabCounts() {
+  var totalLeads = 0;
+  chatsByStage.forEach(function (entries) {
+    totalLeads += entries.length;
+  });
+
   var tabs = document.querySelectorAll(".ocrm-stage-tab");
   tabs.forEach(function (tab) {
     var stageName = tab.dataset.stage;
     var countEl = tab.querySelector(".ocrm-stage-tab-count");
     if (!countEl) return;
+
     if (stageName === "ALL") {
-      countEl.textContent = String(phoneStageMap.size);
+      countEl.textContent = String(totalLeads);
     } else {
       countEl.textContent = String(stageCounts.get(stageName) || 0);
     }
@@ -526,145 +663,382 @@ function buildChatPhoneIndex() {
 }
 
 /**
- * Extract phone number from a WhatsApp chat list DOM item.
- * Uses WPP cached data first, then DOM fallback.
+ * Build per-stage chat buckets by merging phoneStageMap (API leads)
+ * with cachedChatList (WPP chats).
  *
- * @param {HTMLElement} chatItem
- * @returns {string|null}
+ * This is the OceanCRM equivalent of Kraya's mt() + et() functions.
+ *
+ * Called:
+ *   - On init (after both loadAllLeads() and getChatList complete)
+ *   - On lead cache refresh (every 5 minutes)
+ *   - After creating a new lead
  */
-function extractPhoneFromChatItem(chatItem) {
-  // Strategy 1: data-id attribute (most reliable DOM approach)
-  var dataIdEl = chatItem.querySelector("[data-id]");
-  if (dataIdEl) {
-    var dataId = dataIdEl.getAttribute("data-id");
-    if (
-      dataId &&
-      (dataId.indexOf("@c.us") !== -1 ||
-        dataId.indexOf("@s.whatsapp.net") !== -1)
-    ) {
-      return dataId.split("@")[0];
-    }
+function buildChatStageBuckets() {
+  chatsByStage.clear();
+  leadByChatId.clear();
+  chatById.clear();
+
+  // 1. Initialize empty arrays for each known stage
+  for (var i = 0; i < stagesList.length; i++) {
+    chatsByStage.set(stagesList[i].stage, []);
   }
 
-  // Strategy 2: All nested data-id attrs
-  var allDataIds = chatItem.querySelectorAll("[data-id]");
-  for (var i = 0; i < allDataIds.length; i++) {
-    var id = allDataIds[i].getAttribute("data-id");
-    if (id && /^\d+@/.test(id)) {
-      return id.split("@")[0];
-    }
+  // 2. Index all WPP chats by serialized ID
+  for (var j = 0; j < cachedChatList.length; j++) {
+    var chat = cachedChatList[j];
+    chatById.set(chat.id._serialized, chat);
   }
 
-  // Strategy 3: Chat title that looks like a phone number
-  var titleSpan = chatItem.querySelector("span[title]");
-  if (titleSpan) {
-    var title = titleSpan.getAttribute("title");
-    if (
-      title &&
-      /^[\d\s+\-()]+$/.test(title) &&
-      title.replace(/\D/g, "").length >= 10
-    ) {
-      return title.replace(/\D/g, "");
-    }
-  }
+  // 3. For each non-group WPP chat, check if it has a CRM lead
+  var matched = 0;
+  var unmatched = 0;
 
-  return null;
-}
+  for (var k = 0; k < cachedChatList.length; k++) {
+    var chat = cachedChatList[k];
+    if (chat.isGroup) continue;
 
-/**
- * Get all chat list items from WhatsApp's DOM.
- * @returns {NodeList|Array}
- */
-function getChatListItems() {
-  var selectors = [
-    '#pane-side div[role="listitem"]',
-    '#pane-side [data-testid="cell-frame-container"]',
-    '#side div[role="listitem"]',
-    '#side [data-testid="cell-frame-container"]',
-    "#pane-side > div > div > div > div[tabindex]",
-  ];
-  for (var i = 0; i < selectors.length; i++) {
-    var items = document.querySelectorAll(selectors[i]);
-    if (items.length > 0) return items;
-  }
-  return [];
-}
+    var phone = normalizePhone(chat.id.user);
+    if (!phone) continue;
 
-/**
- * Apply the active stage filter to the WhatsApp chat list.
- * Shows/hides chat items based on their phone→stage mapping.
- */
-function filterChatList() {
-  var chatItems = getChatListItems();
-  if (!chatItems.length) {
-    console.warn("[OceanCRM] No chat items found to filter");
-    return;
-  }
-
-  var visibleCount = 0;
-  var hiddenCount = 0;
-
-  chatItems.forEach(function (item) {
-    // No filter active → show all
-    if (!activeStageFilter) {
-      item.style.display = "";
-      visibleCount++;
-      return;
+    var leadData = getStageForPhone(phone);
+    if (!leadData) {
+      unmatched++;
+      continue;
     }
 
-    var phone = extractPhoneFromChatItem(item);
-    if (!phone) {
-      // Can't identify (groups, broadcasts) → hide when filtering
-      item.style.display = "none";
-      hiddenCount++;
-      return;
+    // Found a matching lead — bucket this chat
+    var stageName = leadData.stage;
+    var bucket = chatsByStage.get(stageName);
+    if (!bucket) {
+      // Stage exists in lead but not in stagesList (e.g., custom stage)
+      bucket = [];
+      chatsByStage.set(stageName, bucket);
     }
 
-    var stageData = getStageForPhone(phone);
-    if (stageData && stageData.stage === activeStageFilter) {
-      item.style.display = "";
-      visibleCount++;
-    } else {
-      item.style.display = "none";
-      hiddenCount++;
+    var entry = {
+      chat: chat,
+      lead: leadData,
+      phone: phone,
+    };
+
+    bucket.push(entry);
+    leadByChatId.set(chat.id._serialized, leadData);
+    matched++;
+  }
+
+  // 4. Also check for leads that have no WPP chat (phone saved in CRM but no WA chat)
+  //    We create "dummy" entries for these so they appear in counts + filtered list
+  phoneStageMap.forEach(function (leadData, phone) {
+    // Check if this lead was already matched via WPP chat
+    var alreadyMatched = false;
+    var bucketForStage = chatsByStage.get(leadData.stage);
+    if (bucketForStage) {
+      for (var m = 0; m < bucketForStage.length; m++) {
+        if (bucketForStage[m].phone === phone) {
+          alreadyMatched = true;
+          break;
+        }
+      }
+    }
+
+    if (!alreadyMatched) {
+      // Create a dummy chat entry (lead exists but no active WA chat)
+      var dummyChat = {
+        id: {
+          user: phone,
+          server: "c.us",
+          _serialized: phone + "@c.us",
+        },
+        name: leadData.name || "+" + phone,
+        isGroup: false,
+        unreadCount: 0,
+        archive: false,
+        timestamp: 0,
+        _isDummy: true, // Flag to identify dummy entries
+      };
+
+      if (!bucketForStage) {
+        bucketForStage = [];
+        chatsByStage.set(leadData.stage, bucketForStage);
+      }
+
+      bucketForStage.push({
+        chat: dummyChat,
+        lead: leadData,
+        phone: phone,
+      });
     }
   });
 
+  // 5. Sort each bucket by timestamp (newest first)
+  chatsByStage.forEach(function (entries) {
+    entries.sort(function (a, b) {
+      return (b.chat.timestamp || 0) - (a.chat.timestamp || 0);
+    });
+  });
+
+  // 6. Update stage counts
+  stageCounts.clear();
+  for (var s = 0; s < stagesList.length; s++) {
+    var sName = stagesList[s].stage;
+    var sBucket = chatsByStage.get(sName);
+    stageCounts.set(sName, sBucket ? sBucket.length : 0);
+  }
+
   console.log(
-    "[OceanCRM] Filter '" +
-      (activeStageFilter || "ALL") +
-      "': " +
-      visibleCount +
-      " shown, " +
-      hiddenCount +
-      " hidden",
+    "[OceanCRM] Chat stage buckets built: " +
+      matched +
+      " matched, " +
+      unmatched +
+      " unmatched (no CRM lead), " +
+      chatsByStage.size +
+      " stages",
   );
 }
 
 /**
- * Observe chat list for lazy-loaded items (WhatsApp virtualizes the list).
+ * Create and inject the custom chat list container.
+ * Positioned exactly where WhatsApp's #pane-side is.
+ * Hidden by default — shown when a stage filter is active.
+ *
+ * Equivalent to Kraya replacing WhatsApp's chat list container.
  */
-function observeChatList() {
-  var container =
-    document.querySelector("#pane-side") || document.querySelector("#side");
-  if (!container) {
-    console.warn("[OceanCRM] Chat list container not found, retrying in 2s...");
-    // Retry after WhatsApp UI finishes loading
-    setTimeout(observeChatList, 2000);
+function createCustomChatListContainer() {
+  // Remove existing if re-creating
+  var existing = document.getElementById("ocrm-chat-list");
+  if (existing) existing.remove();
+
+  var container = document.createElement("div");
+  container.id = "ocrm-chat-list";
+  container.className = "ocrm-chat-list";
+  container.style.display = "none"; // Hidden by default
+
+  // Header with filter info
+  var header = document.createElement("div");
+  header.className = "ocrm-chat-list-header";
+  header.innerHTML =
+    '<span id="ocrm-chat-list-title">Filtered Chats</span>' +
+    '<span id="ocrm-chat-list-count" class="ocrm-chat-list-count"></span>';
+  container.appendChild(header);
+
+  // Empty state
+  var emptyState = document.createElement("div");
+  emptyState.id = "ocrm-chat-list-empty";
+  emptyState.className = "ocrm-chat-list-empty";
+  emptyState.style.display = "none";
+  emptyState.innerHTML =
+    '<div class="ocrm-empty-icon">📋</div>' +
+    '<div class="ocrm-empty-text">No leads in this stage</div>' +
+    '<div class="ocrm-empty-hint">Leads will appear here when assigned to this stage</div>';
+  container.appendChild(emptyState);
+
+  // Scrollable chat list area
+  var scrollArea = document.createElement("div");
+  scrollArea.id = "ocrm-chat-list-scroll";
+  scrollArea.className = "ocrm-chat-list-scroll";
+  container.appendChild(scrollArea);
+
+  // Inject next to #pane-side (sibling, not child)
+  var panesSide = document.getElementById("pane-side");
+  if (panesSide && panesSide.parentNode) {
+    panesSide.parentNode.insertBefore(container, panesSide.nextSibling);
+    console.log("[OceanCRM] Custom chat list container created");
+  } else {
+    // Fallback: inject into #side or #app
+    var side = document.getElementById("side");
+    if (side) {
+      side.appendChild(container);
+      console.log("[OceanCRM] Custom chat list container created (in #side)");
+    } else {
+      console.error(
+        "[OceanCRM] Cannot inject custom chat list — no container found",
+      );
+    }
+  }
+}
+
+/**
+ * Render the filtered chat list for a given stage.
+ * Clears the custom list and populates it with chats from the stage bucket.
+ *
+ * @param {string} stageName - Stage to filter (e.g., "RAW (UNQUALIFIED)")
+ */
+function renderFilteredChatList(stageName) {
+  var scrollArea = document.getElementById("ocrm-chat-list-scroll");
+  var emptyState = document.getElementById("ocrm-chat-list-empty");
+  var titleEl = document.getElementById("ocrm-chat-list-title");
+  var countEl = document.getElementById("ocrm-chat-list-count");
+
+  if (!scrollArea) {
+    console.error("[OceanCRM] Custom chat list scroll area not found");
     return;
   }
 
-  var debounceTimer = null;
-  var observer = new MutationObserver(function () {
-    if (!activeStageFilter) return;
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(function () {
-      filterChatList();
-    }, 200);
+  // Clear existing items
+  scrollArea.innerHTML = "";
+
+  // Get bucket
+  var entries = chatsByStage.get(stageName) || [];
+
+  // Update header
+  if (titleEl) titleEl.textContent = formatStageName(stageName);
+  if (countEl)
+    countEl.textContent =
+      entries.length + " lead" + (entries.length !== 1 ? "s" : "");
+
+  // Show empty state if no entries
+  if (entries.length === 0) {
+    if (emptyState) emptyState.style.display = "";
+    return;
+  }
+  if (emptyState) emptyState.style.display = "none";
+
+  // Render each chat item
+  for (var i = 0; i < entries.length; i++) {
+    var item = renderChatItem(entries[i].chat, entries[i].lead);
+    scrollArea.appendChild(item);
+  }
+}
+
+/**
+ * Create a single chat list item DOM element.
+ * Simplified version of Kraya's ki() function.
+ *
+ * @param {object} chat - WPP chat object
+ * @param {object} lead - Lead data from phoneStageMap
+ * @returns {HTMLElement}
+ */
+function renderChatItem(chat, lead) {
+  var item = document.createElement("div");
+  item.className = "ocrm-chat-item";
+  item.dataset.chatId = chat.id._serialized;
+  item.dataset.phone = chat.id.user;
+
+  // Mark dummy entries
+  if (chat._isDummy) {
+    item.classList.add("ocrm-chat-item-dummy");
+  }
+
+  // Avatar
+  var avatar = document.createElement("div");
+  avatar.className = "ocrm-chat-avatar";
+  var initials = getInitials(chat.name || lead.name || chat.id.user);
+  avatar.innerHTML =
+    '<span class="ocrm-avatar-initials">' + initials + "</span>";
+  item.appendChild(avatar);
+
+  // Info section (name + last message)
+  var info = document.createElement("div");
+  info.className = "ocrm-chat-info";
+
+  var nameEl = document.createElement("div");
+  nameEl.className = "ocrm-chat-name";
+  nameEl.textContent =
+    chat.name || lead.name || formatPhoneDisplay(chat.id.user);
+  info.appendChild(nameEl);
+
+  // Last message preview
+  var previewEl = document.createElement("div");
+  previewEl.className = "ocrm-chat-preview";
+  if (chat.lastMessageBody) {
+    previewEl.textContent = chat.lastMessageBody;
+  } else if (chat._isDummy) {
+    previewEl.textContent = "No WhatsApp chat found";
+    previewEl.classList.add("ocrm-chat-preview-muted");
+  } else {
+    previewEl.textContent = "";
+  }
+  info.appendChild(previewEl);
+
+  item.appendChild(info);
+
+  // Meta section (time + badges)
+  var meta = document.createElement("div");
+  meta.className = "ocrm-chat-meta";
+
+  // Timestamp
+  var timeEl = document.createElement("div");
+  timeEl.className = "ocrm-chat-time";
+  timeEl.textContent = chat.timestamp ? formatChatTime(chat.timestamp) : "";
+  meta.appendChild(timeEl);
+
+  // Unread badge
+  if (chat.unreadCount > 0) {
+    var unreadBadge = document.createElement("div");
+    unreadBadge.className = "ocrm-chat-unread";
+    unreadBadge.textContent = String(chat.unreadCount);
+    meta.appendChild(unreadBadge);
+  }
+
+  item.appendChild(meta);
+
+  // Click handler — open this chat in WhatsApp
+  item.addEventListener("click", function () {
+    handleChatItemClick(chat.id._serialized, chat._isDummy);
   });
 
-  observer.observe(container, { childList: true, subtree: true });
-  console.log("[OceanCRM] Chat list observer started");
+  return item;
+}
+
+/**
+ * Get initials from a name (for avatar).
+ * "Srinet Global School" → "SG"
+ * "+919876543210" → "91"
+ */
+function getInitials(name) {
+  if (!name) return "?";
+  var words = name.trim().split(/\s+/);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+}
+
+/**
+ * Format phone number for display.
+ * "919876543210" → "+91 98765 43210"
+ */
+function formatPhoneDisplay(phone) {
+  if (!phone) return "Unknown";
+  if (phone.length > 10) {
+    var cc = phone.substring(0, phone.length - 10);
+    var rest = phone.substring(phone.length - 10);
+    return "+" + cc + " " + rest.substring(0, 5) + " " + rest.substring(5);
+  }
+  return "+" + phone;
+}
+
+/**
+ * Format a Unix timestamp into a human-readable relative time.
+ *
+ * @param {number} ts - Unix timestamp (seconds)
+ * @returns {string}
+ */
+function formatChatTime(ts) {
+  if (!ts) return "";
+  var date = new Date(ts * 1000);
+  var now = new Date();
+
+  // Today
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // Yesterday
+  var yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  }
+
+  // Within this week
+  var diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+  if (diffDays < 7) {
+    return date.toLocaleDateString([], { weekday: "short" });
+  }
+
+  // Older
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 /**
@@ -681,7 +1055,8 @@ function isLeadAlreadyCreated(phone) {
 }
 
 /**
- * Refresh lead data (after creating a lead, org change, etc.)
+ * Refresh lead data and rebuild stage buckets.
+ * Called after creating a lead, org change, or on 5-minute timer.
  */
 async function refreshLeadCache() {
   var stored = await new Promise(function (resolve) {
@@ -689,12 +1064,23 @@ async function refreshLeadCache() {
   });
   if (!stored.baseUrl || !stored.orgId) return;
 
+  // Reload leads
   await loadAllLeads(stored.baseUrl, stored.orgId);
-  recomputeStageCounts();
+
+  // Reload WPP chat list (new chats may have appeared)
+  try {
+    cachedChatList = await wppRequest("getChatListEnriched", {}, 20000);
+  } catch (err) {
+    console.warn("[OceanCRM] WPP chat list refresh failed:", err);
+  }
+
+  // Rebuild buckets
+  buildChatStageBuckets();
   updateStageTabCounts();
 
-  if (activeStageFilter) {
-    filterChatList();
+  // If a stage filter is active, re-render the custom list
+  if (activeStageFilter && customListVisible) {
+    renderFilteredChatList(activeStageFilter);
   }
 }
 
@@ -714,7 +1100,7 @@ async function initStageFilter(baseUrl, orgId) {
     console.log("[OceanCRM] Initializing stage filter...");
     showToast("Loading leads...", "info");
 
-    // 1. Wait for WPP.js to be ready (with timeout fallback)
+    // 1. Wait for WPP.js to be ready
     var wppTimeout = setTimeout(function () {
       console.warn("[OceanCRM] WPP.js timeout, falling back to DOM-only");
     }, 30000);
@@ -724,20 +1110,17 @@ async function initStageFilter(baseUrl, orgId) {
       clearTimeout(wppTimeout);
     } catch (err) {
       clearTimeout(wppTimeout);
-      console.warn(
-        "[OceanCRM] WPP.js not available, using DOM-only filtering",
-        err,
-      );
+      console.warn("[OceanCRM] WPP.js not available", err);
     }
 
-    // 2. Load stages (re-fetch or reuse)
+    // 2. Load stages
     var stagesResponse = await sendMessage({
       type: "getStages",
       baseUrl: baseUrl,
       orgId: orgId,
     });
     if (!stagesResponse.ok || !stagesResponse.data) {
-      console.error("[OceanCRM] Failed to load stages for filter bar");
+      console.error("[OceanCRM] Failed to load stages");
       showToast("Failed to load stages", "error");
       return;
     }
@@ -745,7 +1128,7 @@ async function initStageFilter(baseUrl, orgId) {
       return a.order - b.order;
     });
 
-    // 3. Load all leads → build phoneStageMap
+    // 3. Load all leads → phoneStageMap
     var success = await loadAllLeads(baseUrl, orgId);
     if (!success) {
       console.error("[OceanCRM] Failed to load leads");
@@ -753,25 +1136,25 @@ async function initStageFilter(baseUrl, orgId) {
       return;
     }
 
-    // 4. Load WPP chat list → cache for phone resolution
+    // 4. Load enriched WPP chat list (with last message bodies)
     try {
-      cachedChatList = await wppRequest("getChatList", {}, 15000);
+      cachedChatList = await wppRequest("getChatListEnriched", {}, 20000);
       console.log("[OceanCRM] Cached " + cachedChatList.length + " WPP chats");
     } catch (err) {
-      console.warn(
-        "[OceanCRM] WPP chat list failed, using DOM-only filtering",
-        err,
-      );
+      console.warn("[OceanCRM] WPP chat list failed", err);
       cachedChatList = [];
     }
 
-    // 5. Render stage bar
+    // 5. BUILD CHAT STAGE BUCKETS (NEW — core of the fix)
+    buildChatStageBuckets();
+
+    // 6. Render stage bar (counts now come from chatsByStage)
     renderStageBar(stagesList);
 
-    // 6. Start observing chat list mutations
-    observeChatList();
+    // 7. Create custom chat list container (hidden by default)
+    createCustomChatListContainer();
 
-    // 7. Start auto-refresh (every 5 minutes)
+    // 8. Start auto-refresh
     startStageRefreshInterval(baseUrl, orgId);
 
     window.__ocrmStageFilterReady = true;

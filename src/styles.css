@@ -780,3 +780,202 @@ body.dark .ocrm-stage-bar {
     width: 20px;
   }
 }
+
+/* ============================================================
+   CUSTOM CHAT LIST (used when stage filter is active)
+   ============================================================ */
+
+/* Container — matches WhatsApp's #pane-side dimensions */
+#ocrm-chat-list {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  overflow: hidden;
+  min-height: 0;
+}
+body.dark #ocrm-chat-list {
+  background: #111b21;
+}
+
+/* Header showing filter name + count */
+.ocrm-chat-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e9edef;
+  font-size: 14px;
+  font-weight: 500;
+  color: #41525d;
+  flex-shrink: 0;
+}
+body.dark .ocrm-chat-list-header {
+  border-bottom-color: #222d34;
+  color: #aebac1;
+}
+
+.ocrm-chat-list-count {
+  font-size: 12px;
+  color: #8696a0;
+  font-weight: 400;
+}
+
+/* Scrollable chat list area */
+.ocrm-chat-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.ocrm-chat-list-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.ocrm-chat-list-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+/* Empty state */
+.ocrm-chat-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  text-align: center;
+  color: #8696a0;
+}
+.ocrm-empty-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+.ocrm-empty-text {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: #41525d;
+}
+body.dark .ocrm-empty-text {
+  color: #e9edef;
+}
+.ocrm-empty-hint {
+  font-size: 13px;
+  color: #8696a0;
+}
+
+/* ── Individual Chat Item ── */
+
+.ocrm-chat-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid #f0f2f5;
+  gap: 12px;
+}
+body.dark .ocrm-chat-item {
+  border-bottom-color: #222d34;
+}
+.ocrm-chat-item:hover {
+  background: #f5f6f6;
+}
+body.dark .ocrm-chat-item:hover {
+  background: #202c33;
+}
+.ocrm-chat-item:active {
+  background: #e9edef;
+}
+body.dark .ocrm-chat-item:active {
+  background: #2a3942;
+}
+
+/* Dummy entries (lead exists but no WA chat) */
+.ocrm-chat-item-dummy {
+  opacity: 0.6;
+}
+
+/* Avatar */
+.ocrm-chat-avatar {
+  width: 49px;
+  height: 49px;
+  border-radius: 50%;
+  background: #dfe5e7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+body.dark .ocrm-chat-avatar {
+  background: #3b4a54;
+}
+.ocrm-avatar-initials {
+  font-size: 18px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+/* Info section (name + preview) */
+.ocrm-chat-info {
+  flex: 1;
+  min-width: 0; /* Allow text truncation */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ocrm-chat-name {
+  font-size: 16px;
+  font-weight: 400;
+  color: #111b21;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.dark .ocrm-chat-name {
+  color: #e9edef;
+}
+.ocrm-chat-preview {
+  font-size: 13px;
+  color: #667781;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.dark .ocrm-chat-preview {
+  color: #8696a0;
+}
+.ocrm-chat-preview-muted {
+  font-style: italic;
+  color: #8696a0;
+}
+
+/* Meta section (time + unread) */
+.ocrm-chat-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 4px;
+}
+.ocrm-chat-time {
+  font-size: 12px;
+  color: #667781;
+  white-space: nowrap;
+}
+body.dark .ocrm-chat-time {
+  color: #8696a0;
+}
+.ocrm-chat-unread {
+  background: #25d366;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}

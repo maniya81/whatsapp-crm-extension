@@ -121,6 +121,71 @@
           break;
         }
 
+        case "openChat": {
+          // Open chat in WhatsApp's native UI
+          try {
+            if (WPP.chat.openChatBottom) {
+              await WPP.chat.openChatBottom(payload.chatId);
+            } else if (WPP.chat.openChatAt) {
+              await WPP.chat.openChatAt(payload.chatId);
+            } else {
+              var chatModel = await WPP.chat.get(payload.chatId);
+              if (chatModel) {
+                await WPP.chat.openChatFromUnread(payload.chatId);
+              }
+            }
+            result = { opened: true };
+          } catch (e) {
+            // Absolute fallback: URL hash navigation
+            var phone = payload.chatId.split("@")[0];
+            window.location.hash = "#/chat/" + phone;
+            result = { opened: true, method: "hash" };
+          }
+          break;
+        }
+
+        case "getChatListEnriched": {
+          // Like getChatList but includes last message body
+          const chats = await WPP.chat.list(payload || {});
+          result = [];
+          for (var i = 0; i < chats.length; i++) {
+            var chat = chats[i];
+            var lastMsg = "";
+            var lastMsgType = "";
+            try {
+              var msgs =
+                chat.msgs && chat.msgs.getModelsArray
+                  ? chat.msgs.getModelsArray()
+                  : [];
+              if (msgs.length > 0) {
+                var last = msgs[msgs.length - 1];
+                lastMsg = last.body || last.caption || "";
+                lastMsgType = last.type || "chat";
+                // Truncate long messages
+                if (lastMsg.length > 100)
+                  lastMsg = lastMsg.substring(0, 100) + "...";
+              }
+            } catch (e) {
+              // Ignore message extraction errors
+            }
+            result.push({
+              id: {
+                user: chat.id.user,
+                server: chat.id.server,
+                _serialized: chat.id._serialized,
+              },
+              name: chat.name || chat.formattedTitle || "",
+              isGroup: chat.isGroup || false,
+              unreadCount: chat.unreadCount || 0,
+              archive: chat.archive || false,
+              timestamp: chat.t || 0,
+              lastMessageBody: lastMsg,
+              lastMessageType: lastMsgType,
+            });
+          }
+          break;
+        }
+
         default:
           sendResponse(id, type, null, "Unknown request type: " + type);
           return;

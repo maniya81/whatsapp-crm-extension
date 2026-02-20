@@ -79,6 +79,45 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "getLeads") {
+    (async () => {
+      try {
+        const headers = await getAuthHeaders(baseUrl);
+        headers["x-org-id"] = message.orgId;
+
+        // Build URL with query parameters
+        const url = new URL(`${baseUrl}/v1/lead`);
+        url.searchParams.set("page", String(message.page || 1));
+        url.searchParams.set("page_size", String(message.pageSize || 500));
+
+        // Default: last 365 days of leads
+        if (message.since) {
+          url.searchParams.set("since", message.since);
+        }
+
+        const res = await fetch(url.toString(), {
+          method: "GET",
+          headers: headers,
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          sendResponse({
+            ok: false,
+            error: `HTTP ${res.status}: ${errorText}`,
+          });
+          return;
+        }
+
+        const data = await res.json();
+        sendResponse({ ok: true, data: data });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
   if (message.type === "createLead") {
     const headers = {
       "x-org-id": message.orgId,

@@ -621,3 +621,162 @@ body.dark {
   display: flex;
   justify-content: flex-end;
 }
+
+/* ============================================================
+   STAGE BAR — Chevron Arrow Tab Styling
+   ============================================================ */
+
+.ocrm-stage-bar {
+  display: flex;
+  align-items: center;
+  background: var(--ocrm-bg, #f0f2f5);
+  border-bottom: 1px solid var(--ocrm-border, #e0e0e0);
+  padding: 0;
+  position: relative;
+  z-index: 100;
+  min-height: 50px;
+  overflow: hidden;
+}
+
+body.dark .ocrm-stage-bar {
+  background: var(--ocrm-bg-dark, #1f2c33);
+  border-bottom-color: #2a3942;
+}
+
+.ocrm-stage-tabs {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  position: relative;
+  flex: 1;
+}
+
+.ocrm-stage-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.ocrm-stage-tab {
+  cursor: pointer;
+  padding: 6px 8px 6px 28px;
+  color: #fff;
+  position: relative;
+  min-width: 90px;
+  max-width: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: filter 0.15s ease;
+  flex-shrink: 0;
+  user-select: none;
+  background-color: var(--ocrm-tab-color);
+}
+
+.ocrm-stage-tab:first-child {
+  padding-left: 12px;
+}
+
+/* Arrow shape: top half */
+.ocrm-stage-tab::after {
+  position: absolute;
+  content: "";
+  top: 0;
+  bottom: 50%;
+  left: 100%;
+  width: 26px;
+  z-index: 1;
+  background: linear-gradient(
+    55deg,
+    var(--ocrm-tab-color) 0% 47%,
+    #ffffff40 47% 50%,
+    transparent 50% 100%
+  );
+}
+
+/* Arrow shape: bottom half */
+.ocrm-stage-tab::before {
+  position: absolute;
+  content: "";
+  top: 50%;
+  bottom: 0;
+  left: 100%;
+  width: 26px;
+  z-index: 1;
+  transform: scaleY(-1);
+  background: linear-gradient(
+    55deg,
+    var(--ocrm-tab-color) 0% 47%,
+    #ffffff40 47% 50%,
+    transparent 50% 100%
+  );
+}
+
+.ocrm-stage-tab:hover {
+  filter: brightness(1.15);
+}
+
+.ocrm-stage-tab-active {
+  outline: 3px solid rgba(255, 255, 255, 0.6);
+  outline-offset: -3px;
+}
+
+.ocrm-stage-tab-count {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.ocrm-stage-tab-name {
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Color cycling: 8 colors via nth-child */
+.ocrm-stage-tab:nth-child(8n + 1) {
+  --ocrm-tab-color: #e74c3c;
+}
+.ocrm-stage-tab:nth-child(8n + 2) {
+  --ocrm-tab-color: #ff8d3d;
+}
+.ocrm-stage-tab:nth-child(8n + 3) {
+  --ocrm-tab-color: #398bcd;
+}
+.ocrm-stage-tab:nth-child(8n + 4) {
+  --ocrm-tab-color: #ae76ae;
+}
+.ocrm-stage-tab:nth-child(8n + 5) {
+  --ocrm-tab-color: #62bb6a;
+}
+.ocrm-stage-tab:nth-child(8n + 6) {
+  --ocrm-tab-color: #f15854;
+}
+.ocrm-stage-tab:nth-child(8n + 7) {
+  --ocrm-tab-color: #48b2cf;
+}
+.ocrm-stage-tab:nth-child(8n + 8) {
+  --ocrm-tab-color: #eaae28;
+}
+
+@media (max-width: 1280px) {
+  .ocrm-stage-tab {
+    min-width: 75px;
+    padding: 5px 6px 5px 22px;
+  }
+  .ocrm-stage-tab-count {
+    font-size: 14px;
+  }
+  .ocrm-stage-tab-name {
+    font-size: 9px;
+  }
+  .ocrm-stage-tab::after,
+  .ocrm-stage-tab::before {
+    width: 20px;
+  }
+}

@@ -1,3 +1,807 @@
+// ============================================================
+// WPP.JS INJECTION & EVENT BRIDGE
+// ============================================================
+
+/**
+ * Inject wa-inject.js (WPP.js library) into the page context.
+ * This runs in the ISOLATED world but injects a <script> into the page,
+ * which executes in the MAIN world and registers window.WPP.
+ *
+ * Pattern taken from Kraya (ext-bundle.min.js lines 55-57):
+ * createElement("script") → getURL("js/wa-inject.js") → onload remove → append to head
+ */
+function injectWPP() {
+  const script = document.createElement("script");
+  script.src = chrome.runtime.getURL("lib/wa-inject.js");
+  script.onload = function () {
+    this.remove(); // Clean up script tag after load
+  };
+  document.head.appendChild(script);
+  console.log("[OceanCRM] Injected wa-inject.js into page");
+}
+
+/** @type {Map<string, {resolve: Function, reject: Function}>} */
+const pendingWPPRequests = new Map();
+
+/**
+ * Send a request to the MAIN world script (main-world.js) via CustomEvent.
+ * Returns a Promise that resolves when the MAIN world responds.
+ *
+ * @param {string} type - Request type (e.g., "getChatList", "findChat")
+ * @param {object} payload - Request payload
+ * @param {number} timeoutMs - Timeout in milliseconds (default: 10000)
+ * @returns {Promise<any>} - The result from WPP
+ */
+function wppRequest(type, payload, timeoutMs) {
+  if (timeoutMs === undefined) timeoutMs = 10000;
+
+  return new Promise(function (resolve, reject) {
+    const id = crypto.randomUUID();
+
+    // Set timeout to avoid hanging forever
+    const timer = setTimeout(function () {
+      pendingWPPRequests.delete(id);
+      reject(new Error("WPP request timeout: " + type));
+    }, timeoutMs);
+
+    pendingWPPRequests.set(id, {
+      resolve: function (result) {
+        clearTimeout(timer);
+        resolve(result);
+      },
+      reject: function (error) {
+        clearTimeout(timer);
+        reject(error);
+      },
+    });
+
+    // Dispatch request to MAIN world
+    window.dispatchEvent(
+      new CustomEvent("ocean-request", {
+        detail: { id: id, type: type, payload: payload || {} },
+      }),
+    );
+  });
+}
+
+/**
+ * Listen for responses from MAIN world.
+ */
+window.addEventListener("ocean-response", function (event) {
+  const detail = event.detail;
+  const pending = pendingWPPRequests.get(detail.id);
+  if (!pending) return;
+
+  pendingWPPRequests.delete(detail.id);
+
+  if (detail.error) {
+    pending.reject(new Error(detail.error));
+  } else {
+    pending.resolve(detail.result);
+  }
+});
+
+/**
+ * Wait for WPP to be ready (main-world.js signals via ocean-wpp-ready event).
+ * @returns {Promise<void>}
+ */
+function waitForWPPReady() {
+  return new Promise(function (resolve) {
+    // Check if already ready
+    wppRequest("isWPPReady", {}, 2000)
+      .then(function (result) {
+        if (result && result.ready) {
+          console.log("[OceanCRM] WPP already ready");
+          resolve();
+          return;
+        }
+        // Not ready, wait for event
+        waitForEvent();
+      })
+      .catch(function () {
+        // Not ready, wait for event
+        waitForEvent();
+      });
+
+    function waitForEvent() {
+      window.addEventListener(
+        "ocean-wpp-ready",
+        function () {
+          console.log("[OceanCRM] WPP ready (via event)");
+          resolve();
+        },
+        { once: true },
+      );
+    }
+  });
+}
+
+// Inject WPP.js immediately on load
+injectWPP();
+
+// ============================================================
+// LEAD CACHE — Phone-to-Stage Mapping
+// ============================================================
+
+/** @type {Map<string, {stage: string, leadId: string, name: string, wa_chat_id: string|null}>} */
+let phoneStageMap = new Map();
+
+/** @type {Map<string, string>} wa_chat_id → normalized phone (for quick dedup) */
+let waChatIdMap = new Map();
+
+/** @type {Array<{stage: string, order: number}>} */
+let stagesList = [];
+
+/** @type {string|null} */
+let activeStageFilter = null;
+
+/** @type {Map<string, number>} */
+let stageCounts = new Map();
+
+/** @type {Array<{id: object, name: string, isGroup: boolean}>} Cached WPP chat list */
+let cachedChatList = [];
+
+/**
+ * Normalize a phone number for consistent matching.
+ * Strips everything except digits.
+ *
+ * Examples:
+ *   "+91 98765 43210"      → "919876543210"
+ *   "919876543210@c.us"    → "919876543210"
+ *   "+1-555-123-4567"      → "15551234567"
+ *
+ * @param {string} phone
+ * @returns {string}
+ */
+function normalizePhone(phone) {
+  if (!phone) return "";
+  // Remove everything except digits
+  var normalized = phone.replace(/[^0-9]/g, "");
+  // Remove leading zeros
+  normalized = normalized.replace(/^0+/, "");
+  return normalized;
+}
+
+/**
+ * Fetch ALL leads from the API (handles pagination).
+ * Builds phoneStageMap and waChatIdMap.
+ *
+ * @param {string} baseUrl
+ * @param {string} orgId
+ * @returns {Promise<boolean>}
+ */
+async function loadAllLeads(baseUrl, orgId) {
+  phoneStageMap.clear();
+  waChatIdMap.clear();
+  stageCounts.clear();
+
+  var page = 1;
+  var totalPages = 1;
+  var totalLoaded = 0;
+
+  // Last 365 days
+  var since = new Date();
+  since.setDate(since.getDate() - 365);
+  var sinceStr = since.toISOString();
+
+  try {
+    while (page <= totalPages) {
+      var response = await sendMessage({
+        type: "getLeads",
+        baseUrl: baseUrl,
+        orgId: orgId,
+        page: page,
+        pageSize: 500,
+        since: sinceStr,
+      });
+
+      if (!response.ok) {
+        console.error(
+          "[OceanCRM] Failed to load leads page",
+          page,
+          response.error,
+        );
+        return false;
+      }
+
+      var data = response.data;
+      totalPages = data.total_pages;
+
+      for (var i = 0; i < data.items.length; i++) {
+        var lead = data.items[i];
+        var phone = normalizePhone(lead.business && lead.business.mobile);
+        if (phone) {
+          phoneStageMap.set(phone, {
+            stage: lead.stage,
+            leadId: lead.id,
+            name: (lead.business && lead.business.name) || "",
+            wa_chat_id: lead.wa_chat_id || null,
+          });
+        }
+        // Also index by wa_chat_id for fast dedup
+        if (lead.wa_chat_id) {
+          waChatIdMap.set(lead.wa_chat_id, phone);
+        }
+      }
+
+      totalLoaded += data.items.length;
+      page++;
+    }
+
+    console.log(
+      "[OceanCRM] Loaded " +
+        totalLoaded +
+        " leads, mapped " +
+        phoneStageMap.size +
+        " phones",
+    );
+
+    recomputeStageCounts();
+    return true;
+  } catch (err) {
+    console.error("[OceanCRM] Error loading leads:", err);
+    return false;
+  }
+}
+
+/**
+ * Recompute per-stage lead counts.
+ */
+function recomputeStageCounts() {
+  stageCounts.clear();
+  for (var i = 0; i < stagesList.length; i++) {
+    stageCounts.set(stagesList[i].stage, 0);
+  }
+  phoneStageMap.forEach(function (data) {
+    var current = stageCounts.get(data.stage) || 0;
+    stageCounts.set(data.stage, current + 1);
+  });
+}
+
+/**
+ * Look up the stage for a given phone number.
+ * Tries exact match first, then last-10-digit fallback.
+ *
+ * @param {string} rawPhone
+ * @returns {{stage: string, leadId: string, name: string, wa_chat_id: string|null} | null}
+ */
+function getStageForPhone(rawPhone) {
+  var normalized = normalizePhone(rawPhone);
+  if (!normalized) return null;
+
+  // Exact match
+  if (phoneStageMap.has(normalized)) {
+    return phoneStageMap.get(normalized);
+  }
+
+  // Last 10 digit fallback (handles country code differences)
+  var last10 = normalized.slice(-10);
+  if (last10.length >= 10) {
+    var entries = Array.from(phoneStageMap.entries());
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i][0].endsWith(last10)) {
+        return entries[i][1];
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Check if a lead already exists for a given wa_chat_id (client-side dedup).
+ * @param {string} waChatId - e.g., "919876543210@c.us"
+ * @returns {boolean}
+ */
+function leadExistsForChat(waChatId) {
+  return waChatIdMap.has(waChatId);
+}
+
+// ============================================================
+// STAGE BAR — Chevron Tab UI
+// ============================================================
+
+/**
+ * Create and inject the stage bar above WhatsApp's chat list.
+ * @param {Array<{stage: string, order: number}>} stages
+ */
+function renderStageBar(stages) {
+  // Remove existing if re-rendering
+  var existing = document.getElementById("ocrm-stage-bar");
+  if (existing) existing.remove();
+
+  var stageBar = document.createElement("div");
+  stageBar.id = "ocrm-stage-bar";
+  stageBar.className = "ocrm-stage-bar";
+
+  var tabsContainer = document.createElement("div");
+  tabsContainer.id = "ocrm-stage-tabs";
+  tabsContainer.className = "ocrm-stage-tabs";
+
+  // "All" tab first
+  var allTab = createStageTab("ALL", null, phoneStageMap.size);
+  allTab.classList.add("ocrm-stage-tab-active");
+  tabsContainer.appendChild(allTab);
+
+  // Pipeline stage tabs
+  for (var i = 0; i < stages.length; i++) {
+    var count = stageCounts.get(stages[i].stage) || 0;
+    var tab = createStageTab(stages[i].stage, stages[i].order, count);
+    tabsContainer.appendChild(tab);
+  }
+
+  stageBar.appendChild(tabsContainer);
+
+  // Inject above #side - try multiple strategies
+  var injected = false;
+
+  // Strategy 1: Insert before #side
+  var sidePanel = document.getElementById("side");
+  if (sidePanel && sidePanel.parentNode) {
+    sidePanel.parentNode.insertBefore(stageBar, sidePanel);
+    injected = true;
+    console.log("[OceanCRM] Stage bar injected before #side");
+  }
+
+  // Strategy 2: Insert before #pane-side
+  if (!injected) {
+    var panePanel = document.querySelector("#pane-side");
+    if (panePanel && panePanel.parentNode) {
+      panePanel.parentNode.insertBefore(stageBar, panePanel);
+      injected = true;
+      console.log("[OceanCRM] Stage bar injected before #pane-side");
+    }
+  }
+
+  // Strategy 3: Insert at app root
+  if (!injected) {
+    var app = document.querySelector("#app > div > div > div");
+    if (app) {
+      app.insertBefore(stageBar, app.firstChild);
+      injected = true;
+      console.log("[OceanCRM] Stage bar injected at app root");
+    }
+  }
+
+  if (!injected) {
+    console.error(
+      "[OceanCRM] Failed to inject stage bar - no suitable container found",
+    );
+    return;
+  }
+
+  bindStageTabClicks();
+
+  // Watch for removal and re-inject if needed
+  watchStageBarRemoval();
+}
+
+/**
+ * Create a single stage tab element.
+ */
+function createStageTab(stageName, order, count) {
+  var tab = document.createElement("div");
+  tab.className = "ocrm-stage-tab";
+  tab.dataset.stage = stageName;
+
+  var countEl = document.createElement("div");
+  countEl.className = "ocrm-stage-tab-count";
+  countEl.textContent = String(count);
+
+  var nameEl = document.createElement("div");
+  nameEl.className = "ocrm-stage-tab-name";
+  nameEl.textContent = formatStageName(stageName);
+
+  tab.appendChild(countEl);
+  tab.appendChild(nameEl);
+  return tab;
+}
+
+/**
+ * Format stage name for display.
+ * "RAW (UNQUALIFIED)" → "Raw"
+ * "NEW" → "New"
+ */
+function formatStageName(stage) {
+  if (stage === "ALL") return "All";
+  var words = stage.split(/[\s(]+/);
+  var primary = words[0];
+  return primary.charAt(0).toUpperCase() + primary.slice(1).toLowerCase();
+}
+
+function bindStageTabClicks() {
+  var tabs = document.querySelectorAll(".ocrm-stage-tab");
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", handleStageTabClick);
+  });
+}
+
+/**
+ * Handle stage tab click — filter or reset.
+ */
+function handleStageTabClick(e) {
+  var tab = e.currentTarget;
+  var stageName = tab.dataset.stage;
+
+  // Double-click on active tab → reset to "All"
+  if (
+    (stageName === "ALL" && activeStageFilter === null) ||
+    stageName === activeStageFilter
+  ) {
+    document.querySelectorAll(".ocrm-stage-tab").forEach(function (t) {
+      t.classList.remove("ocrm-stage-tab-active");
+    });
+    var allTab = document.querySelector('.ocrm-stage-tab[data-stage="ALL"]');
+    if (allTab) allTab.classList.add("ocrm-stage-tab-active");
+    activeStageFilter = null;
+    filterChatList();
+    return;
+  }
+
+  // Activate selected stage
+  document.querySelectorAll(".ocrm-stage-tab").forEach(function (t) {
+    t.classList.remove("ocrm-stage-tab-active");
+  });
+  tab.classList.add("ocrm-stage-tab-active");
+  activeStageFilter = stageName === "ALL" ? null : stageName;
+  filterChatList();
+}
+
+/**
+ * Update counts on stage tabs.
+ */
+function updateStageTabCounts() {
+  var tabs = document.querySelectorAll(".ocrm-stage-tab");
+  tabs.forEach(function (tab) {
+    var stageName = tab.dataset.stage;
+    var countEl = tab.querySelector(".ocrm-stage-tab-count");
+    if (!countEl) return;
+    if (stageName === "ALL") {
+      countEl.textContent = String(phoneStageMap.size);
+    } else {
+      countEl.textContent = String(stageCounts.get(stageName) || 0);
+    }
+  });
+}
+
+/**
+ * Watch for stage bar removal and re-inject if needed.
+ */
+var stageBarObserver = null;
+
+function watchStageBarRemoval() {
+  if (stageBarObserver) {
+    stageBarObserver.disconnect();
+  }
+
+  var appContainer = document.querySelector("#app");
+  if (!appContainer) {
+    console.warn("[OceanCRM] Cannot watch stage bar - #app not found");
+    return;
+  }
+
+  stageBarObserver = new MutationObserver(function (mutations) {
+    // Check if stage bar still exists
+    var stageBar = document.getElementById("ocrm-stage-bar");
+    if (!stageBar && stagesList.length > 0) {
+      console.warn("[OceanCRM] Stage bar removed, re-injecting...");
+      setTimeout(function () {
+        renderStageBar(stagesList);
+      }, 500);
+    }
+  });
+
+  stageBarObserver.observe(appContainer, {
+    childList: true,
+    subtree: true,
+  });
+
+  console.log("[OceanCRM] Stage bar removal watcher active");
+}
+
+// ============================================================
+// CHAT LIST FILTERING (WPP-Enhanced)
+// ============================================================
+
+/**
+ * Build a map of phone → chat info from the WPP chat list cache.
+ * This lets us look up phone numbers for DOM chat items without DOM scraping.
+ *
+ * @returns {Map<string, {serialized: string, name: string}>}
+ */
+function buildChatPhoneIndex() {
+  var index = new Map();
+  for (var i = 0; i < cachedChatList.length; i++) {
+    var chat = cachedChatList[i];
+    if (chat.isGroup) continue; // Skip groups
+    var phone = normalizePhone(chat.id.user);
+    if (phone) {
+      index.set(phone, {
+        serialized: chat.id._serialized,
+        name: chat.name,
+      });
+    }
+  }
+  return index;
+}
+
+/**
+ * Extract phone number from a WhatsApp chat list DOM item.
+ * Uses WPP cached data first, then DOM fallback.
+ *
+ * @param {HTMLElement} chatItem
+ * @returns {string|null}
+ */
+function extractPhoneFromChatItem(chatItem) {
+  // Strategy 1: data-id attribute (most reliable DOM approach)
+  var dataIdEl = chatItem.querySelector("[data-id]");
+  if (dataIdEl) {
+    var dataId = dataIdEl.getAttribute("data-id");
+    if (
+      dataId &&
+      (dataId.indexOf("@c.us") !== -1 ||
+        dataId.indexOf("@s.whatsapp.net") !== -1)
+    ) {
+      return dataId.split("@")[0];
+    }
+  }
+
+  // Strategy 2: All nested data-id attrs
+  var allDataIds = chatItem.querySelectorAll("[data-id]");
+  for (var i = 0; i < allDataIds.length; i++) {
+    var id = allDataIds[i].getAttribute("data-id");
+    if (id && /^\d+@/.test(id)) {
+      return id.split("@")[0];
+    }
+  }
+
+  // Strategy 3: Chat title that looks like a phone number
+  var titleSpan = chatItem.querySelector("span[title]");
+  if (titleSpan) {
+    var title = titleSpan.getAttribute("title");
+    if (
+      title &&
+      /^[\d\s+\-()]+$/.test(title) &&
+      title.replace(/\D/g, "").length >= 10
+    ) {
+      return title.replace(/\D/g, "");
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get all chat list items from WhatsApp's DOM.
+ * @returns {NodeList|Array}
+ */
+function getChatListItems() {
+  var selectors = [
+    '#pane-side div[role="listitem"]',
+    '#pane-side [data-testid="cell-frame-container"]',
+    '#side div[role="listitem"]',
+    '#side [data-testid="cell-frame-container"]',
+    "#pane-side > div > div > div > div[tabindex]",
+  ];
+  for (var i = 0; i < selectors.length; i++) {
+    var items = document.querySelectorAll(selectors[i]);
+    if (items.length > 0) return items;
+  }
+  return [];
+}
+
+/**
+ * Apply the active stage filter to the WhatsApp chat list.
+ * Shows/hides chat items based on their phone→stage mapping.
+ */
+function filterChatList() {
+  var chatItems = getChatListItems();
+  if (!chatItems.length) {
+    console.warn("[OceanCRM] No chat items found to filter");
+    return;
+  }
+
+  var visibleCount = 0;
+  var hiddenCount = 0;
+
+  chatItems.forEach(function (item) {
+    // No filter active → show all
+    if (!activeStageFilter) {
+      item.style.display = "";
+      visibleCount++;
+      return;
+    }
+
+    var phone = extractPhoneFromChatItem(item);
+    if (!phone) {
+      // Can't identify (groups, broadcasts) → hide when filtering
+      item.style.display = "none";
+      hiddenCount++;
+      return;
+    }
+
+    var stageData = getStageForPhone(phone);
+    if (stageData && stageData.stage === activeStageFilter) {
+      item.style.display = "";
+      visibleCount++;
+    } else {
+      item.style.display = "none";
+      hiddenCount++;
+    }
+  });
+
+  console.log(
+    "[OceanCRM] Filter '" +
+      (activeStageFilter || "ALL") +
+      "': " +
+      visibleCount +
+      " shown, " +
+      hiddenCount +
+      " hidden",
+  );
+}
+
+/**
+ * Observe chat list for lazy-loaded items (WhatsApp virtualizes the list).
+ */
+function observeChatList() {
+  var container =
+    document.querySelector("#pane-side") || document.querySelector("#side");
+  if (!container) {
+    console.warn("[OceanCRM] Chat list container not found, retrying in 2s...");
+    // Retry after WhatsApp UI finishes loading
+    setTimeout(observeChatList, 2000);
+    return;
+  }
+
+  var debounceTimer = null;
+  var observer = new MutationObserver(function () {
+    if (!activeStageFilter) return;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function () {
+      filterChatList();
+    }, 200);
+  });
+
+  observer.observe(container, { childList: true, subtree: true });
+  console.log("[OceanCRM] Chat list observer started");
+}
+
+/**
+ * Check if a lead already exists for the currently open chat.
+ * Uses phoneStageMap (same pattern as Kraya's oa() function).
+ *
+ * @param {string} phone - Phone number of the contact
+ * @returns {boolean}
+ */
+function isLeadAlreadyCreated(phone) {
+  if (!phone) return false;
+  var normalized = normalizePhone(phone);
+  return phoneStageMap.has(normalized);
+}
+
+/**
+ * Refresh lead data (after creating a lead, org change, etc.)
+ */
+async function refreshLeadCache() {
+  var stored = await new Promise(function (resolve) {
+    chrome.storage.local.get(["baseUrl", "orgId"], resolve);
+  });
+  if (!stored.baseUrl || !stored.orgId) return;
+
+  await loadAllLeads(stored.baseUrl, stored.orgId);
+  recomputeStageCounts();
+  updateStageTabCounts();
+
+  if (activeStageFilter) {
+    filterChatList();
+  }
+}
+
+// ============================================================
+// STAGE FILTER INITIALIZATION
+// ============================================================
+
+/**
+ * Initialize the full stage filtering feature.
+ * Called after auth + org are confirmed.
+ *
+ * @param {string} baseUrl
+ * @param {string} orgId
+ */
+async function initStageFilter(baseUrl, orgId) {
+  try {
+    console.log("[OceanCRM] Initializing stage filter...");
+    showToast("Loading leads...", "info");
+
+    // 1. Wait for WPP.js to be ready (with timeout fallback)
+    var wppTimeout = setTimeout(function () {
+      console.warn("[OceanCRM] WPP.js timeout, falling back to DOM-only");
+    }, 30000);
+
+    try {
+      await waitForWPPReady();
+      clearTimeout(wppTimeout);
+    } catch (err) {
+      clearTimeout(wppTimeout);
+      console.warn(
+        "[OceanCRM] WPP.js not available, using DOM-only filtering",
+        err,
+      );
+    }
+
+    // 2. Load stages (re-fetch or reuse)
+    var stagesResponse = await sendMessage({
+      type: "getStages",
+      baseUrl: baseUrl,
+      orgId: orgId,
+    });
+    if (!stagesResponse.ok || !stagesResponse.data) {
+      console.error("[OceanCRM] Failed to load stages for filter bar");
+      showToast("Failed to load stages", "error");
+      return;
+    }
+    stagesList = stagesResponse.data.sort(function (a, b) {
+      return a.order - b.order;
+    });
+
+    // 3. Load all leads → build phoneStageMap
+    var success = await loadAllLeads(baseUrl, orgId);
+    if (!success) {
+      console.error("[OceanCRM] Failed to load leads");
+      showToast("Failed to load leads", "error");
+      return;
+    }
+
+    // 4. Load WPP chat list → cache for phone resolution
+    try {
+      cachedChatList = await wppRequest("getChatList", {}, 15000);
+      console.log("[OceanCRM] Cached " + cachedChatList.length + " WPP chats");
+    } catch (err) {
+      console.warn(
+        "[OceanCRM] WPP chat list failed, using DOM-only filtering",
+        err,
+      );
+      cachedChatList = [];
+    }
+
+    // 5. Render stage bar
+    renderStageBar(stagesList);
+
+    // 6. Start observing chat list mutations
+    observeChatList();
+
+    // 7. Start auto-refresh (every 5 minutes)
+    startStageRefreshInterval(baseUrl, orgId);
+
+    window.__ocrmStageFilterReady = true;
+    console.log("[OceanCRM] Stage filter initialized successfully");
+    showToast(phoneStageMap.size + " leads loaded", "success");
+  } catch (err) {
+    console.error("[OceanCRM] Stage filter init error:", err);
+    showToast("Stage filter initialization failed", "error");
+  }
+}
+
+/**
+ * Auto-refresh lead cache periodically.
+ */
+var stageRefreshInterval = null;
+
+function startStageRefreshInterval(baseUrl, orgId) {
+  if (stageRefreshInterval) clearInterval(stageRefreshInterval);
+  stageRefreshInterval = setInterval(
+    function () {
+      refreshLeadCache();
+    },
+    5 * 60 * 1000,
+  ); // Every 5 minutes
+}
+
+// ============================================================
+// EXTENSION CONFIGURATION & UTILITIES
+// ============================================================
+
 const DEFAULT_BASE_URL = "http://localhost:8000/api";
 
 // ============ LOADING MESSAGES ============
@@ -330,7 +1134,7 @@ function detectChatInfo() {
     name = "";
   }
 
-  console.log("[OceanCRM] Detected:", { name, phone: detectedPhone, rawTitle });
+  // console.log("[OceanCRM] Detected:", { name, phone: detectedPhone, rawTitle });
 
   return {
     name: name || "",
@@ -767,16 +1571,40 @@ async function createLeadFromSidebar(baseUrl) {
     return;
   }
 
+  // Client-side duplicate check
+  if (phone && isLeadAlreadyCreated(phone)) {
+    showToast("Lead already exists for this contact", "warning");
+    return;
+  }
+
+  // Get wa_chat_id from WPP
+  var waChatId = null;
+  if (phone) {
+    var normalized = normalizePhone(phone);
+    waChatId = normalized + "@c.us";
+
+    // Try to get more accurate wa_chat_id from WPP
+    try {
+      var wppChat = await wppRequest("findChat", { phone: phone }, 5000);
+      if (wppChat) {
+        waChatId = wppChat.id._serialized;
+      }
+    } catch (e) {
+      console.warn("[OceanCRM] WPP findChat error, using fallback", e);
+    }
+  }
+
   const lead = {
     assigned_to: null,
     tags: [],
     stage: stage,
-    source_id: null,
+    source_id: 3, // WHATSAPP_SOURCE_ID
     product_id: null,
     potential: 0,
     requirements: "",
     notes: notes,
     since: new Date().toISOString(),
+    wa_chat_id: waChatId,
     business: {
       business: name || phone,
       name: name,
@@ -818,6 +1646,9 @@ async function createLeadFromSidebar(baseUrl) {
     statusEl.classList.remove("error");
   }
   showToast("Lead created successfully!", "success");
+
+  // Refresh lead cache
+  await refreshLeadCache();
 }
 
 async function createLeadFromChatSidebar(baseUrl) {
@@ -857,16 +1688,40 @@ async function createLeadFromChatSidebar(baseUrl) {
     return;
   }
 
+  // Client-side duplicate check
+  if (phone && isLeadAlreadyCreated(phone)) {
+    showToast("Lead already exists for this contact", "warning");
+    return;
+  }
+
+  // Get wa_chat_id from WPP
+  var waChatId = null;
+  if (phone) {
+    var normalized = normalizePhone(phone);
+    waChatId = normalized + "@c.us";
+
+    // Try to get more accurate wa_chat_id from WPP
+    try {
+      var wppChat = await wppRequest("findChat", { phone: phone }, 5000);
+      if (wppChat) {
+        waChatId = wppChat.id._serialized;
+      }
+    } catch (e) {
+      console.warn("[OceanCRM] WPP findChat error, using fallback", e);
+    }
+  }
+
   const lead = {
     assigned_to: null,
     tags: [],
     stage: stageName,
-    source_id: null,
+    source_id: 3, // WHATSAPP_SOURCE_ID
     product_id: null,
     potential: 0,
     requirements: "",
     notes: detectChatPreview() || "",
     since: new Date().toISOString(),
+    wa_chat_id: waChatId,
     business: {
       business: name || phone,
       name: name,
@@ -897,6 +1752,9 @@ async function createLeadFromChatSidebar(baseUrl) {
   }
 
   showToast("Lead created from chat!", "success");
+
+  // Refresh lead cache
+  await refreshLeadCache();
 }
 
 function ensureWidget() {
@@ -1215,6 +2073,7 @@ async function createLead(baseUrl) {
   const nameInput = document.getElementById("ocrm-name");
   const phoneInput = document.getElementById("ocrm-phone");
   const notesInput = document.getElementById("ocrm-notes");
+  const emailInput = document.getElementById("ocrm-email");
 
   if (!orgSelect || !stageSelect || !nameInput || !phoneInput || !notesInput) {
     return;
@@ -1234,23 +2093,49 @@ async function createLead(baseUrl) {
     return;
   }
 
+  // Client-side duplicate check
+  if (phone && isLeadAlreadyCreated(phone)) {
+    setStatus("Lead already exists for this contact", true);
+    showToast("Lead already exists for this contact", "warning");
+    return;
+  }
+
+  // Get chat phone for wa_chat_id
+  var chatPhone = detectPhoneFromUrl() || detectPhoneFromDataId();
+  var waChatId = null;
+  if (chatPhone) {
+    var normalized = normalizePhone(chatPhone);
+    waChatId = normalized + "@c.us";
+
+    // Try to get more accurate wa_chat_id from WPP
+    try {
+      var wppChat = await wppRequest("findChat", { phone: chatPhone }, 5000);
+      if (wppChat) {
+        waChatId = wppChat.id._serialized;
+      }
+    } catch (e) {
+      console.warn("[OceanCRM] WPP findChat error, using fallback", e);
+    }
+  }
+
   const lead = {
     assigned_to: null,
     tags: [],
     stage: stageSelect.value || "RAW (UNQUALIFIED)",
-    source_id: null,
+    source_id: 3, // WHATSAPP_SOURCE_ID
     product_id: null,
     potential: 0,
     requirements: "",
     notes: notesInput.value || "",
     since: new Date().toISOString(),
+    wa_chat_id: waChatId,
     business: {
       business: name || phone,
       name: name,
       title: null,
       designation: "",
       mobile: phone,
-      email: "",
+      email: emailInput?.value || "",
       website: "",
       address_line_1: "",
       address_line_2: "",
@@ -1274,6 +2159,9 @@ async function createLead(baseUrl) {
   }
 
   setStatus("Lead created successfully");
+
+  // Refresh lead cache
+  await refreshLeadCache();
 }
 
 async function initWidget() {
@@ -1297,6 +2185,8 @@ async function initWidget() {
       const orgSelect = document.getElementById("ocrm-orgs");
       if (orgSelect && orgSelect.value) {
         await loadStages(baseUrl, orgSelect.value);
+        // Initialize stage filter after org is loaded
+        await initStageFilter(baseUrl, orgSelect.value);
       }
     }
 
@@ -1343,6 +2233,9 @@ async function initWidget() {
       await chrome.storage.local.set({ orgId });
       const currentBase = baseInput.value.trim() || DEFAULT_BASE_URL;
       await loadStages(currentBase, orgId);
+      // Reset and reinitialize stage filter when org changes
+      activeStageFilter = null;
+      await initStageFilter(currentBase, orgId);
     });
   }
 

@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "OceanCRM WhatsApp Lead",
-  "version": "0.1.0",
-  "description": "Create OceanCRM leads from WhatsApp Web.",
+  "name": "OceanCRM WhatsApp Extension",
+  "version": "1.1.0",
+  "description": "OceanCRM WhatsApp integration with stage filtering",
   "permissions": ["storage", "cookies"],
   "host_permissions": [
     "https://web.whatsapp.com/*",
-    "http://localhost:8000/*",
-    "http://127.0.0.1:8000/*"
+    "https://*.oceancrm.in/*",
+    "http://localhost:8000/*"
   ],
   "background": {
     "service_worker": "src/background.js"
@@ -16,10 +16,20 @@
     {
       "matches": ["https://web.whatsapp.com/*"],
       "js": ["src/content.js"],
-      "css": ["src/styles.css"]
+      "css": ["src/styles.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["src/main-world.js"],
+      "world": "MAIN",
+      "run_at": "document_idle"
     }
   ],
-  "action": {
-    "default_title": "OceanCRM Lead"
-  }
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/wa-inject.js"],
+      "matches": ["https://web.whatsapp.com/*"]
+    }
+  ]
 }

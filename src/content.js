@@ -358,7 +358,42 @@ function setupAPIBridge() {
       });
   });
 
-  console.log("[OceanCRM] API bridge ready (5 event handlers registered)");
+  // ── Update Lead ──────────────────────────────────────────────
+  window.addEventListener("OceanCRMUpdateLeadRequestEvent", function (event) {
+    var detail = event.detail || {};
+    sendMessage({
+      type: "updateLead",
+      baseUrl: detail.baseUrl,
+      orgId: detail.orgId,
+      leadId: detail.leadId,
+      lead: detail.lead,
+    })
+      .then(function (response) {
+        window.dispatchEvent(
+          new CustomEvent("OceanCRMUpdateLeadResponseEvent", {
+            detail: response,
+          }),
+        );
+      })
+      .catch(function (err) {
+        window.dispatchEvent(
+          new CustomEvent("OceanCRMUpdateLeadResponseEvent", {
+            detail: { ok: false, error: err.message },
+          }),
+        );
+      });
+  });
+
+  // ── Broadcast Base URL to MAIN world ──
+  loadBaseUrl().then(function (url) {
+    window.dispatchEvent(
+      new CustomEvent("OceanCRMConfigEvent", {
+        detail: { baseUrl: url || DEFAULT_BASE_URL },
+      }),
+    );
+  });
+
+  console.log("[OceanCRM] API bridge ready (6 event handlers registered)");
 }
 
 // ============================================================

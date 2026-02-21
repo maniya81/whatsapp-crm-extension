@@ -133,6 +133,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "updateLead") {
+    const headers = {
+      "x-org-id": message.orgId,
+      "Content-Type": "application/json",
+    };
+    apiRequest(baseUrl, "/v1/lead/" + message.leadId, {
+      method: "PUT",
+      headers,
+      body: message.lead,
+    })
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   if (message.type === "pingAuth") {
     apiRequest(baseUrl, "/v1/user/logged")
       .then((data) => sendResponse({ ok: true, data }))

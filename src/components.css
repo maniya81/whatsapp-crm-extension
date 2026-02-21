@@ -1,0 +1,601 @@
+/* ============================================================
+   COMPONENTS — Reusable UI Component Styles
+   ============================================================
+   - Chat stage badges (inline in WA's chat items)
+   - Sidebar panel
+   - Toggle button
+   - Loading overlay
+   - Toast notifications
+   - Utility classes
+   ============================================================ */
+
+/* ============================================================
+   Chat Stage Badges (injected into WA's native chat items)
+   ============================================================ */
+
+.ocrm-chat-stage-status {
+  color: var(--ocrm-badge-color, #00a884);
+  font-size: 12px;
+  border: 2px solid var(--ocrm-badge-color, #00a884);
+  padding: 1px 5px;
+  border-radius: 6px;
+  display: inline-block;
+  font-weight: 500;
+  margin-right: 4px;
+  margin-top: -2px;
+  white-space: nowrap;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  line-height: 1.3;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+/* Auto-responder badge */
+.ocrm-chat-auto-status {
+  color: #ff9800;
+  font-size: 11px;
+  border: 2px solid #ff9800;
+  padding: 1px 4px;
+  border-radius: 4px;
+  display: inline-block;
+  font-weight: 600;
+  margin-right: 4px;
+  vertical-align: middle;
+  line-height: 1.3;
+}
+
+/* Badge container (wraps inside WA's chat row highlight area) */
+.ocrm-badge-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Dark mode badge adjustments */
+body.dark .ocrm-chat-stage-status {
+  /* Badge colors are set via inline style, so no override needed.
+     But we slightly increase brightness for visibility. */
+  filter: brightness(1.1);
+}
+
+/* ============================================================
+   Sidebar Panel (enhanced from current)
+   ============================================================ */
+
+.ocrm-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  height: 100vh;
+  background: var(--ocrm-bg, #f8f4ec);
+  border-left: 1px solid var(--ocrm-border, #e0d6c7);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  color: var(--ocrm-text, #2f2a25);
+}
+
+.ocrm-sidebar.collapsed {
+  transform: translateX(100%);
+}
+
+/* Sidebar toggle button */
+.ocrm-sidebar-toggle {
+  position: fixed;
+  top: 50%;
+  right: 380px;
+  transform: translateY(-50%);
+  z-index: 301;
+  background: var(--ocrm-bg, #f8f4ec);
+  border: 1px solid var(--ocrm-border, #e0d6c7);
+  border-right: none;
+  padding: 12px 8px;
+  border-radius: 8px 0 0 8px;
+  cursor: pointer;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+  transition: right 0.3s ease;
+}
+
+.ocrm-sidebar-toggle.collapsed {
+  right: 0;
+}
+
+.ocrm-sidebar-toggle.collapsed svg {
+  transform: rotate(180deg);
+}
+
+.ocrm-sidebar-toggle svg {
+  display: block;
+  color: var(--ocrm-accent, #1565c0);
+  transition: transform 0.3s ease;
+}
+
+/* Sidebar tabs */
+.ocrm-sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--ocrm-border, #e0d6c7);
+}
+
+.ocrm-sidebar-tab {
+  flex: 1;
+  padding: 14px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+  background: transparent;
+  border: none;
+  color: inherit;
+}
+
+.ocrm-sidebar-tab:hover {
+  background: var(--ocrm-bg-alt, #efe7dc);
+}
+
+.ocrm-sidebar-tab.active {
+  background: rgba(21, 101, 192, 0.08);
+  border-bottom-color: var(--ocrm-accent, #1565c0);
+}
+
+.ocrm-sidebar-tab.active svg {
+  color: var(--ocrm-accent, #1565c0);
+}
+
+.ocrm-sidebar-tab.active strong {
+  color: var(--ocrm-accent, #1565c0);
+}
+
+.ocrm-sidebar-tab svg {
+  color: var(--ocrm-muted, #7b6f63);
+  opacity: 0.8;
+}
+
+.ocrm-sidebar-tab strong {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ocrm-muted, #7b6f63);
+}
+
+/* Sidebar content */
+.ocrm-sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.ocrm-tab-pane {
+  display: none;
+}
+
+.ocrm-tab-pane.active {
+  display: block;
+}
+
+/* Sections */
+.ocrm-section {
+  margin-bottom: 20px;
+  border: 1px solid var(--ocrm-border, #e0d6c7);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ocrm-section-header {
+  background: var(--ocrm-bg-alt, #efe7dc);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ocrm-border, #e0d6c7);
+}
+
+.ocrm-section-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ocrm-text, #2f2a25);
+}
+
+.ocrm-section-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Form fields */
+.ocrm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ocrm-field label {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ocrm-muted, #7b6f63);
+}
+
+.ocrm-field input,
+.ocrm-field select,
+.ocrm-field textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--ocrm-border, #e0d6c7);
+  border-radius: 6px;
+  background: var(--ocrm-bg, #f8f4ec);
+  color: var(--ocrm-text, #2f2a25);
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.ocrm-field input:focus,
+.ocrm-field select:focus,
+.ocrm-field textarea:focus {
+  outline: none;
+  border-color: var(--ocrm-accent, #1565c0);
+}
+
+.ocrm-field textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Buttons */
+.ocrm-btn-primary {
+  background: var(--ocrm-accent, #1565c0);
+  color: #fff;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    transform 0.1s;
+}
+
+.ocrm-btn-primary:hover {
+  background: var(--ocrm-accent-dark, #0d47a1);
+  transform: translateY(-1px);
+}
+
+.ocrm-btn-primary:active {
+  transform: translateY(0);
+}
+
+.ocrm-btn-secondary {
+  background: var(--ocrm-bg, #f8f4ec);
+  color: var(--ocrm-accent, #1565c0);
+  border: 1px solid var(--ocrm-accent, #1565c0);
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ocrm-btn-secondary:hover {
+  background: rgba(21, 101, 192, 0.08);
+  transform: translateY(-1px);
+}
+
+/* Sidebar actions */
+.ocrm-sidebar-actions {
+  display: flex;
+  gap: 10px;
+  padding: 16px 0;
+}
+
+.ocrm-sidebar-actions button {
+  flex: 1;
+}
+
+.ocrm-sidebar-status {
+  text-align: center;
+  font-size: 13px;
+  color: var(--ocrm-success, #198f51);
+  padding: 8px;
+}
+
+.ocrm-sidebar-status.error {
+  color: var(--ocrm-danger, #b00020);
+}
+
+/* Session info */
+.ocrm-session-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--ocrm-bg-alt, #efe7dc);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.ocrm-session-info strong {
+  color: var(--ocrm-success, #198f51);
+}
+
+.ocrm-session-info strong.error {
+  color: var(--ocrm-danger, #b00020);
+}
+
+/* Detected info */
+.ocrm-detected-info {
+  background: var(--ocrm-bg-alt, #efe7dc);
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.ocrm-detected-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.ocrm-detected-row span {
+  color: var(--ocrm-muted, #7b6f63);
+}
+
+.ocrm-detected-row strong {
+  color: var(--ocrm-text, #2f2a25);
+}
+
+/* Hints */
+.ocrm-hint {
+  font-size: 13px;
+  color: var(--ocrm-muted, #7b6f63);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+/* ============================================================
+   Toggle Button (floating CRM button)
+   ============================================================ */
+
+.ocrm-toggle {
+  position: fixed;
+  right: 400px;
+  bottom: 24px;
+  z-index: 2147483647;
+  background: var(--ocrm-accent, #1565c0);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(21, 101, 192, 0.3);
+  transition: all 0.2s;
+}
+
+.ocrm-toggle:hover {
+  background: var(--ocrm-accent-dark, #0d47a1);
+  transform: translateY(-2px);
+}
+
+/* ============================================================
+   Widget Panel (floating CRM popup)
+   ============================================================ */
+
+.ocrm-widget {
+  position: fixed;
+  right: 400px;
+  bottom: 72px;
+  width: 340px;
+  max-height: 75vh;
+  background: var(--ocrm-bg, #f8f4ec);
+  border: 1px solid var(--ocrm-border, #e0d6c7);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 2147483647;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  color: var(--ocrm-text, #2f2a25);
+}
+
+.ocrm-widget.open {
+  display: flex;
+}
+
+/* Widget header */
+.ocrm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--ocrm-bg-alt, #efe7dc);
+  border-bottom: 1px solid var(--ocrm-border, #e0d6c7);
+}
+
+.ocrm-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ocrm-accent, #1565c0);
+}
+
+.ocrm-close {
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  color: var(--ocrm-muted, #7b6f63);
+}
+
+/* Widget body */
+.ocrm-body {
+  padding: 14px 16px 18px;
+  overflow-y: auto;
+}
+
+.ocrm-row {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+  gap: 6px;
+}
+
+.ocrm-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ocrm-row label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--ocrm-muted, #7b6f63);
+}
+
+.ocrm-row input,
+.ocrm-row select,
+.ocrm-row textarea {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ocrm-border, #e0d6c7);
+  background: var(--ocrm-bg, #f8f4ec);
+  color: var(--ocrm-text, #2f2a25);
+  font-size: 14px;
+}
+
+.ocrm-row button {
+  border: 1px solid var(--ocrm-border, #e0d6c7);
+  background: var(--ocrm-bg, #f8f4ec);
+  color: var(--ocrm-text, #2f2a25);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.ocrm-primary {
+  background: var(--ocrm-accent, #1565c0);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ocrm-primary:hover {
+  background: var(--ocrm-accent-dark, #0d47a1);
+}
+
+.ocrm-status {
+  font-size: 12px;
+  color: var(--ocrm-muted, #7b6f63);
+}
+
+.ocrm-status.error,
+.ocrm-muted.error {
+  color: var(--ocrm-danger, #b00020);
+}
+
+.ocrm-muted {
+  font-size: 12px;
+  color: var(--ocrm-muted, #7b6f63);
+}
+
+/* Widget modal */
+.ocrm-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 16, 12, 0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.ocrm-modal.open {
+  display: flex;
+}
+
+.ocrm-modal-card {
+  background: var(--ocrm-bg, #f8f4ec);
+  border-radius: 12px;
+  border: 1px solid var(--ocrm-border, #e0d6c7);
+  padding: 12px;
+  width: 90%;
+  max-width: 300px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--ocrm-text, #2f2a25);
+}
+
+.ocrm-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.ocrm-modal-header button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ocrm-muted, #7b6f63);
+}
+
+.ocrm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ============================================================
+   Utility Classes
+   ============================================================ */
+
+.ocrm-hidden {
+  display: none !important;
+}
+
+.ocrm-invisible {
+  visibility: hidden;
+}
+
+.ocrm-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ocrm-flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ocrm-gap-4 {
+  gap: 4px;
+}
+
+.ocrm-gap-8 {
+  gap: 8px;
+}
+
+.ocrm-gap-12 {
+  gap: 12px;
+}

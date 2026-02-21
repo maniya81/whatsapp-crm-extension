@@ -1,0 +1,539 @@
+/* ============================================================
+   NAVBAR — 3-Layer Top Bar System
+   ============================================================
+   Layer 1: Warning banners (collapsible)
+   Layer 2: Main navbar (logo + filter tabs + action buttons)
+   Layer 3: Stage pipeline (colored arrow tabs + scroll buttons)
+   ============================================================ */
+
+/* ── Navbar Container ── */
+.ocrm-navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 99;
+  display: flex;
+  flex-direction: column;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   Layer 1: Warning Banners
+   ============================================================ */
+
+.ocrm-warning-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.ocrm-warning-banner.session-warning {
+  background: #fef3cd;
+  color: #856404;
+  border-bottom: 1px solid #ffc107;
+}
+
+.ocrm-warning-banner.trial-warning {
+  background: #d4edda;
+  color: #155724;
+  border-bottom: 1px solid #28a745;
+}
+
+.ocrm-warning-banner.hours-warning {
+  background: #fff3cd;
+  color: #856404;
+  border-bottom: 1px solid #ffc107;
+}
+
+.ocrm-warning-banner .ocrm-banner-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: inherit;
+  opacity: 0.7;
+  padding: 0 4px;
+}
+
+.ocrm-warning-banner .ocrm-banner-close:hover {
+  opacity: 1;
+}
+
+/* Dark mode warning banners */
+body.dark .ocrm-warning-banner.session-warning {
+  background: #332b00;
+  color: #ffc107;
+  border-bottom-color: #665500;
+}
+
+body.dark .ocrm-warning-banner.trial-warning {
+  background: #0d2818;
+  color: #28a745;
+  border-bottom-color: #155724;
+}
+
+body.dark .ocrm-warning-banner.hours-warning {
+  background: #332b00;
+  color: #ffc107;
+  border-bottom-color: #665500;
+}
+
+/* ============================================================
+   Layer 2: Main Navbar
+   ============================================================ */
+
+.ocrm-main-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  min-height: 48px;
+  background: #ffffff;
+  border-bottom: 1px solid #e9edef;
+}
+
+body.dark .ocrm-main-navbar {
+  background: #1f2c33;
+  border-bottom-color: #2a3942;
+}
+
+/* WA color-refresh variant */
+.color-refresh .ocrm-main-navbar,
+.smb-colors .ocrm-main-navbar {
+  background: #161717;
+  border-bottom-color: #2a2a2a;
+}
+
+/* ── Left side: Logo + Filter Tabs ── */
+
+.ocrm-lhs-navbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.ocrm-logo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ocrm-logo img {
+  height: 28px;
+  width: auto;
+}
+
+.ocrm-logo-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ocrm-accent, #1565c0);
+  white-space: nowrap;
+}
+
+.ocrm-version-badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: #8696a0;
+  background: rgba(134, 150, 160, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* ── Filter Tabs ── */
+
+.ocrm-filter-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ocrm-filter-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.ocrm-filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 20px;
+  background: transparent;
+  color: #54656f;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.ocrm-filter-tab:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+body.dark .ocrm-filter-tab {
+  color: #aebac1;
+}
+
+body.dark .ocrm-filter-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ocrm-filter-tab.active-tab {
+  background: rgba(0, 168, 132, 0.12);
+  color: #00a884;
+  font-weight: 600;
+}
+
+body.dark .ocrm-filter-tab.active-tab {
+  background: rgba(0, 168, 132, 0.18);
+  color: #00a884;
+}
+
+.ocrm-filter-tab-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ocrm-filter-tab-label {
+  display: inline;
+}
+
+/* ── Right side: Action Buttons ── */
+
+.ocrm-navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.ocrm-navbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid #e9edef;
+  border-radius: 8px;
+  background: transparent;
+  color: #54656f;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.ocrm-navbar-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  transform: translateY(-1px);
+}
+
+body.dark .ocrm-navbar-btn {
+  border-color: #374045;
+  color: #aebac1;
+}
+
+body.dark .ocrm-navbar-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ocrm-navbar-btn.primary {
+  background: var(--ocrm-accent, #1565c0);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.ocrm-navbar-btn.primary:hover {
+  background: var(--ocrm-accent-dark, #0d47a1);
+}
+
+/* ============================================================
+   Layer 3: Stage Pipeline Navbar
+   ============================================================ */
+
+.ocrm-stage-navbar {
+  display: flex;
+  align-items: center;
+  background: #f0f2f5;
+  border-top: 1px solid #e9edef;
+  min-height: 50px;
+  position: relative;
+}
+
+body.dark .ocrm-stage-navbar {
+  background: #1f2c33;
+  border-top-color: #2a3942;
+}
+
+/* WA color-refresh variant */
+.color-refresh .ocrm-stage-navbar,
+.smb-colors .ocrm-stage-navbar {
+  background: #161717;
+  border-top-color: #2a2a2a;
+}
+
+/* ── Scroll Buttons ── */
+
+.ocrm-stage-scroll-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 100%;
+  min-height: 50px;
+  border: none;
+  background: rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  color: #54656f;
+  font-size: 16px;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+  z-index: 2;
+}
+
+.ocrm-stage-scroll-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+body.dark .ocrm-stage-scroll-btn {
+  background: rgba(255, 255, 255, 0.04);
+  color: #aebac1;
+}
+
+body.dark .ocrm-stage-scroll-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Stage Tabs Container ── */
+
+.ocrm-stage-tabs {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  position: relative;
+  flex: 1;
+  scroll-behavior: smooth;
+}
+
+.ocrm-stage-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Individual Stage Tab (Chevron Arrow) ── */
+
+.ocrm-stage-tab-cont {
+  cursor: pointer;
+  padding: 6px 8px 6px 28px;
+  color: #ffffff;
+  position: relative;
+  min-width: 90px;
+  max-width: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: filter 0.15s ease;
+  flex-shrink: 0;
+  user-select: none;
+  background-color: var(--ocrm-tab-color);
+}
+
+.ocrm-stage-tab-cont:first-child {
+  padding-left: 12px;
+}
+
+/* Arrow shape: top half */
+.ocrm-stage-tab-cont::after {
+  position: absolute;
+  content: "";
+  top: 0;
+  bottom: 50%;
+  left: 100%;
+  width: 26px;
+  z-index: 1;
+  background: linear-gradient(
+    55deg,
+    var(--ocrm-tab-color) 0% 47%,
+    #ffffff40 47% 50%,
+    transparent 50% 100%
+  );
+}
+
+/* Arrow shape: bottom half */
+.ocrm-stage-tab-cont::before {
+  position: absolute;
+  content: "";
+  top: 50%;
+  bottom: 0;
+  left: 100%;
+  width: 26px;
+  z-index: 1;
+  transform: scaleY(-1);
+  background: linear-gradient(
+    55deg,
+    var(--ocrm-tab-color) 0% 47%,
+    #ffffff40 47% 50%,
+    transparent 50% 100%
+  );
+}
+
+.ocrm-stage-tab-cont:hover {
+  filter: brightness(1.15);
+}
+
+.ocrm-stage-tab-cont.active-tab {
+  outline: 3px solid rgba(255, 255, 255, 0.6);
+  outline-offset: -3px;
+}
+
+/* Tab inner text */
+.ocrm-stage-tab-count {
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.2;
+  margin-left: 4px;
+}
+
+.ocrm-stage-tab-name {
+  font-size: 14px;
+  line-height: 20px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ── Scroll Gradient Overlays ── */
+
+.ocrm-stage-tabs-wrapper {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+
+.ocrm-stage-tabs-wrapper::before,
+.ocrm-stage-tabs-wrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.ocrm-stage-tabs-wrapper::before {
+  left: 0;
+  background: linear-gradient(to right, #f0f2f5, transparent);
+}
+
+.ocrm-stage-tabs-wrapper::after {
+  right: 0;
+  background: linear-gradient(to left, #f0f2f5, transparent);
+}
+
+body.dark .ocrm-stage-tabs-wrapper::before {
+  background: linear-gradient(to right, #1f2c33, transparent);
+}
+
+body.dark .ocrm-stage-tabs-wrapper::after {
+  background: linear-gradient(to left, #1f2c33, transparent);
+}
+
+.ocrm-stage-tabs-wrapper.can-scroll-left::before {
+  opacity: 1;
+}
+
+.ocrm-stage-tabs-wrapper.can-scroll-right::after {
+  opacity: 1;
+}
+
+/* ── Responsive: 1280px and below ── */
+
+@media (max-width: 1280px) {
+  .ocrm-stage-tab-cont {
+    min-width: 75px;
+    padding: 5px 6px 5px 22px;
+  }
+
+  .ocrm-stage-tab-count {
+    font-size: 16px;
+  }
+
+  .ocrm-stage-tab-name {
+    font-size: 10px;
+  }
+
+  .ocrm-stage-tab-cont::after,
+  .ocrm-stage-tab-cont::before {
+    width: 20px;
+  }
+
+  .ocrm-filter-tab {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .ocrm-navbar-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+}
+
+/* ── Tooltip for stage tabs ── */
+
+.ocrm-stage-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 100;
+  margin-bottom: 4px;
+}
+
+.ocrm-stage-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #333;
+}
+
+.ocrm-stage-tab-cont:hover .ocrm-stage-tooltip {
+  opacity: 1;
+}
